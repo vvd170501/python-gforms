@@ -6,6 +6,7 @@ from bs4 import BeautifulSoup as BS
 
 from .elements import ActChoiceInputElement, ElementType, Element, InputElement, Page, Value
 from .elements import CallbackRetval, default_callback
+from .errors import InfiniteLoop
 from .util import Action, add_indent, SEP_WIDTH
 
 
@@ -34,8 +35,8 @@ class GForm:
         page = http.get(self.url, params=params)
         soup = BS(page.text, 'html.parser')
         self._fbzx = self._get_fbzx(soup)
-        self._history = None  # TODO !!
-        self._draft = None  # TODO !!
+        self._history = self._get_history(soup)
+        self._draft = self._get_draft(soup)
         data = self._raw_form(soup)
         self.name = data[self.Index.NAME]  # not shown anywhere (?)
         form = data[self.Index.FORM]
@@ -69,7 +70,7 @@ class GForm:
 
     def fill(
                 self,
-                callback: Callable[[Element, int, int], CallbackRetval] = None,
+                callback: Callable[[InputElement, int, int], CallbackRetval] = None,
                 fill_optional=False
             ):
         """
@@ -93,25 +94,16 @@ class GForm:
         sub_url = re.sub(r'(.+)viewform.*', r'\1formResponse', self.url)
 
         def submit_page(page, history, draft):
-            # TODO parse previous page for history and draft
-            next_page = page.next_page
+            next_page = page.next_page  # TODO move to a separate method
             payload = {}
             for elem in page.elements:
                 if not isinstance(elem, InputElement):
                     continue
                 payload.update(elem.payload())
-                if isinstance(elem, ActChoiceInputElement):
-                    next_page = next_page  # TODO !!
+                if next_page is not None and isinstance(elem, ActChoiceInputElement) and\
+                        elem.next_page is not None:
+                    next_page = elem.next_page
 
-###############################################################################################################
-#                if elem.value is Value.EMPTY and elem.required:
-#                    raise RuntimeError(f'No value for {elem.name}')
-#                if isinstance(elem, ChoiceInputElement) and elem.other_value:  # check!!
-#                    payload[field['submit_id']] = '__other_option__'
-#                    payload[field['submit_id'] + '.other_option_response'] = field['value']
-#                else:
-#                    payload[field['submit_id']] = field['value']
-###############################################################################################################
             payload['fbzx'] = self._fbzx
             if next_page is not None:
                 payload['continue'] = 1
@@ -125,22 +117,27 @@ class GForm:
         history = self._history
         draft = self._draft
 
-        raise NotImplementedError()  # !!!
+        submitted = set()
 
         while next_page is not None:
+            submitted.add(next_page)
             sub_result, next_page = submit_page(next_page, history, draft)
             res.append(sub_result)
             if sub_result.status_code != 200:
-                raise RuntimeError(res)
+                raise RuntimeError('Invalid response code', res)
+            if next_page in submitted:
+                raise InfiniteLoop(self)  # TODO move to fill()
             if next_page is None:
                 break
             soup = BS(sub_result.text, 'html.parser')
-            history = None  # TODO !!
-            draft = None  # TODO !!
-#            ph = soup.find('input', {'name': 'pageHistory'})
-#            if ph is None:
-#                break  # finished?
-#            next_page = int(ph['value'].rsplit(',', 1)[-1])
+            history = self._get_history(soup)
+            draft = self._get_draft(soup)
+            if history is None:
+                if next_page is None:
+                    raise RuntimeError('Incorrect next page', self, res, next_page)
+                break
+            if next_page is None or next_page.index != int(history.rsplit(',', 1)[-1]):
+                raise RuntimeError('Incorrect next page', self, res, next_page)
         return res
 
     def _resolve_actions(self):
@@ -152,6 +149,20 @@ class GForm:
     @staticmethod
     def _get_fbzx(soup):
         return soup.find('input', {'name': 'fbzx'})['value']
+
+    @staticmethod
+    def _get_history(soup):
+        history = soup.find('input', {'name': 'pageHistory'})
+        if history is None:
+            return None
+        return history['value']
+
+    @staticmethod
+    def _get_draft(soup):
+        draft = soup.find('input', {'name': 'draftResponse'})
+        if draft is None:
+            return None
+        return draft['value']
 
     @staticmethod
     def _raw_form(soup):

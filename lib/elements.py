@@ -2,6 +2,8 @@ import random
 from enum import Enum, auto
 from typing import List, Literal, Union
 
+from .errors import DuplicateOther, InvalidValue, MultipleRowValues, MultipleValues, \
+                    RequiredElement, RequiredRow
 from .options import ActionOption, Option
 from .util import Action, add_indent, random_subset, SEP_WIDTH
 
@@ -21,7 +23,7 @@ CallbackRetval = Union[MultiValue, GridValue, Value]
 
 class ElementType(Enum):
     # NOTE File upload element is not implemented
-    # NOTE short text / paragraph / checkbox input validation is not implemented
+    # TODO add custom validation for short text / paragraph / checkboxes / grid
     SHORT = 0
     PARAGRAPH = 1
     RADIO = 2
@@ -89,13 +91,19 @@ class InputElement(Element):
         self.required = value[self.Index.REQUIRED]
         self.value = Value.EMPTY
 
-    def submit_id(self):
+    def submit_id(self, entry_id=None):
+        if entry_id is None:
+            entry_id = self.entry_id
         return f'entry.{self.entry_id}'
 
     def set_value(self, value: Union[ElemValue, EmptyValue]):
+        if value is Value.EMPTY and self.required:
+            raise RequiredElement(self)
         self.value = value
 
     def payload(self):
+        if self.value is Value.EMPTY:
+            return {}
         return {self.submit_id(): self.value}
 
     def to_str(self, indent=0, include_answer=False):
@@ -119,24 +127,63 @@ class InputElement(Element):
 class ChoiceInputElement(InputElement):
     def __init__(self, elem):
         super().__init__(elem)
+
         value = elem[self.Index.VALUE][0]
-        self.options = [Option.parse(opt) for opt in value[self.Index.OPTIONS]]
+        self.options = []
+        self.other_option = None
+        for opt in value[self.Index.OPTIONS]:
+            option = Option.parse(opt)
+            if getattr(option, 'other', False):
+                self.other_option = option
+            else:
+                self.options.append(option)
+
         self.other_value = Value.EMPTY
 
     def set_value(self, choices: Union[MultiValue, EmptyValue]):
-        choices = self._canonical_form(choices)
-
-        if choices is Value.EMPTY:
+        self.other_value = Value.EMPTY
+        all_choices = self._canonical_form(choices)
+        if all_choices is Value.EMPTY:
+            if self.required:
+                raise RequiredElement(self)
             self.value = Value.EMPTY
             return
 
-        for i, choice in enumerate(choices):
+        choices = []
+        available = {opt.value for opt in self.options}
+        for i, choice in enumerate(all_choices):
+            is_other = False
             if isinstance(choice, Option):
-                choices[i] = choice.value
+                # assuming choice is in self.options or choice == self.other_option
+                is_other = choice.other
+                choice = choice.value
+            else:
+                is_other = choice in available
+
+            if is_other:
+                if self.other_option is None:
+                    raise InvalidValue(self, choice)
+                if self.other_value is not Value.EMPTY:
+                    raise DuplicateOther(self)
+                self.other_value = choice
+            else:
+                choices.append(choice)
+
+        if not choices:
+            choices = Value.EMPTY
         self.value = choices
 
-    def payload(self):  # TODO !!
-        return {self.submit_id(): self.value}
+    def payload(self):
+        if self.value is Value.EMPTY and self.other_value is Value.EMPTY:
+            return {}
+        payload = {self.submit_id(): []}
+        if self.value is not Value.EMPTY:
+            payload[self.submit_id()] += self.value
+        if self.other_value is not Value.EMPTY:
+            payload[self.submit_id()].append('__other_option__')
+            other_key = self.submit_id() + '.other_option_response'
+            payload[other_key] = self.other_value
+        return payload
 
     def to_str(self, indent=0, include_answer=False):
         s = super().to_str(indent)
@@ -168,7 +215,7 @@ class ActChoiceInputElement(ChoiceInputElement):
     """ChoiceInputElement with optional actions based on choice"""
     def __init__(self, elem):
         super().__init__(elem)
-        self._next_page = None
+        self.next_page = None
 
     def _resolve_actions(self, next_page, mapping):
         for option in self.options:
@@ -176,14 +223,29 @@ class ActChoiceInputElement(ChoiceInputElement):
                 option._resolve_action(next_page, mapping)
 
     def set_value(self, choice: Union[ElemValue, EmptyValue]):
-        if isinstance(choice, ActionOption):
-            self._next_page = choice.next_page  # TODO use next_page when submitting
         super().set_value(choice)
+
+        if self.value is not Value.EMPTY and \
+                (self.other_value is not Value.EMPTY or len(self.value) > 1):
+            raise MultipleValues(self)
+
+        self.next_page = None
+
+        if isinstance(choice, ActionOption):
+            self.next_page = choice.next_page
+        elif isinstance(choice, str) and isinstance(self.options[0], ActionOption):
+            if self.other_value is not Value.EMPTY:
+                self.next_page = self.other_option.next_page
+                return
+            for opt in self.options:
+                if opt.value == choice:
+                    self.next_page = opt.next_page
+                    return
 
     def to_str(self, indent=0, include_answer=False):
         s = super().to_str(indent, include_answer)
-        if include_answer and self.value is not Value.EMPTY and self._next_page is not None:
-            if self._next_page is Page.SUBMIT():
+        if include_answer and self.value is not Value.EMPTY and self.next_page is not None:
+            if self.next_page is Page.SUBMIT():
                 s = f'{s}\nGo to SUBMIT'
             else:
                 s = f'{s}\nGo to page {self._next_page.index + 1}'
@@ -232,6 +294,11 @@ class Scale(ChoiceInputElement):
         labels = value[self.Index.LABELS]
         self.low, self.high = labels
 
+    def set_value(self, value):
+        super().set_value(value)
+        if self.value is not Value.EMPTY and len(self.value) > 1:
+            raise MultipleValues(self)
+
     def to_str(self, indent=0, include_answer=False):
         s = super(ChoiceInputElement, self).to_str(indent)
         values = f'{self.options[0].to_str(indent)} - {self.options[-1].to_str(indent)}'
@@ -259,6 +326,8 @@ class Grid(ChoiceInputElement):
 
     def set_value(self, choices: Union[GridValue, EmptyValue]):
         if choices is Value.EMPTY or not choices:
+            if self.required:
+                raise RequiredElement(self)
             self.value = Value.EMPTY
             return
 
@@ -267,11 +336,24 @@ class Grid(ChoiceInputElement):
         for i, row in enumerate(choices):
             row = choices[i] = self._canonical_form(row)
             if row is Value.EMPTY:
+                if self.required:
+                    raise RequiredRow(self, row)
                 continue
+            if len(row) > 1 and not self.multichoice:
+                raise MultipleRowValues(self, row)
             for j, choice in enumerate(row):
                 if isinstance(choice, Option):
                     row[j] = choice.value
         self.value = choices
+
+    def payload(self):
+        if self.value is Value.EMPTY:
+            return {}
+        payload = {}
+        for entry_id, choices in zip(self.entry_ids, self.value):
+            if choices is not Value.EMPTY:
+                payload[self.submit_id(entry_id)] = choices
+        return payload
 
     def to_str(self, indent=0, include_answer=False):
         tp = 'CheckboxGrid' if self.multichoice else 'RadioGrid'
@@ -396,26 +478,25 @@ class Time(InputElement):
     pass
 
 
-def default_callback(elem, page_index, elem_index) \
+def default_callback(elem: InputElement, page_index, elem_index) \
         -> Union[MultiValue, GridValue, EmptyValue]:
     if isinstance(elem, Scale) or isinstance(elem, Dropdown):
         return random.choice(elem.options)
     if isinstance(elem, Radio):
         # Don't auto-choose "Other"
-        opts = [opt for opt in elem.options if not opt.other]
-        return random.choice(opts)
+        return random.choice(elem.options)
 
     # Example: allow "Other"
-#       opt = random.choice(elem.options)
-#       if opt.other:
-#           # return 'Sample text'  # another alternative
-#           opt.value = 'Sample text'
-#       return opt
+#       if elem.other_option is not None:
+#           opt = random.choice(elem.options + [elem.other_option])
+#           if opt.other:
+#               # return 'Sample text'  # another alternative
+#               opt.value = 'Sample text'
+#           return opt
 
     if isinstance(elem, Checkboxes):
         # Don't auto-choose "Other"
-        opts = [opt for opt in elem.options if not opt.other]
-        return random_subset(opts, nonempty=elem.required)
+        return random_subset(elem.options, nonempty=elem.required)
 
     if isinstance(elem, Grid):
         n = len(elem.rows)
