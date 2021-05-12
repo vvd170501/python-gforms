@@ -4,7 +4,7 @@ from typing import Callable
 
 from bs4 import BeautifulSoup as BS
 
-from .elements import ActChoiceInputElement, ElementType, Element, InputElement, Page, Value
+from .elements import ElementType, Element, InputElement, Page, Value
 from .elements import CallbackRetval, default_callback
 from .errors import InfiniteLoop
 from .util import Action, add_indent, SEP_WIDTH
@@ -90,57 +90,53 @@ class GForm:
                     value = default_callback(elem, page.index, elem_index)
                 elem.set_value(value)
 
+        page = self.pages[0]
+        pages_to_submit = {page}
+        while page is not None:
+            page = page.next_page()
+            if page in pages_to_submit:
+                raise InfiniteLoop(self)
+            pages_to_submit.add(page)
+
     def submit(self, http):
         sub_url = re.sub(r'(.+)viewform.*', r'\1formResponse', self.url)
 
-        def submit_page(page, history, draft):
-            next_page = page.next_page  # TODO move to a separate method
+        def submit_page(page, history, draft, continue_):
             payload = {}
-            if page is not Page.SUBMIT():
-                for elem in page.elements:
-                    if not isinstance(elem, InputElement):
-                        continue
-                    payload.update(elem.payload())
-                    if next_page is not None and isinstance(elem, ActChoiceInputElement) and\
-                            elem.next_page is not None:
-                        next_page = elem.next_page
+            for elem in page.elements:
+                if not isinstance(elem, InputElement):
+                    continue
+                payload.update(elem.payload())
 
             payload['fbzx'] = self._fbzx
-            if next_page is not None:
+            if continue_:
                 payload['continue'] = 1
             payload['pageHistory'] = history
             payload['draftResponse'] = draft
 
-            return http.post(sub_url, data=payload), next_page
+            return http.post(sub_url, data=payload)
 
         res = []
-        next_page = self.pages[0]
+        page = self.pages[0]
         history = self._history
         draft = self._draft
 
-        submitted = set()
-
         # Compose pageHistory and draftResponse manually?
         # In this case, 1-2 requests may be enough
-        while next_page is not None:
-            submitted.add(next_page)
-            sub_result, next_page = submit_page(next_page, history, draft)
+        while page is not None:
+            next_page = page.next_page()
+            sub_result = submit_page(page, history, draft, next_page is not None)
+            page = next_page
             res.append(sub_result)
             if sub_result.status_code != 200:
                 raise RuntimeError('Invalid response code', res)
-            if next_page in submitted:
-                raise InfiniteLoop(self)  # TODO move to fill()
-            if next_page is None:
-                break
             soup = BS(sub_result.text, 'html.parser')
             history = self._get_history(soup)
             draft = self._get_draft(soup)
-            if history is None:
-                if next_page is None:
-                    raise RuntimeError('Incorrect next page', self, res, next_page)
+            if page is None and history is None:
                 break
-            if next_page is None or next_page.index != int(history.rsplit(',', 1)[-1]):
-                raise RuntimeError('Incorrect next page', self, res, next_page)
+            if page is None or history is None or page.index != int(history.rsplit(',', 1)[-1]):
+                raise RuntimeError('Incorrect next page', self, res, page)
         return res
 
     def _resolve_actions(self):

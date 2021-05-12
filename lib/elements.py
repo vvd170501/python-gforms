@@ -126,6 +126,12 @@ class InputElement(Element):
         return f'{s}\n> {val}'
 
 
+class TextInputElement(InputElement):
+    def set_value(self, value: Union[TextValue, EmptyValue]):
+        super().set_value(value)
+
+
+# TODO refactor class hierarchy?
 class ChoiceInputElement(InputElement):
     def __init__(self, elem):
         super().__init__(elem)
@@ -266,11 +272,11 @@ class Video(MediaElement):
     pass
 
 
-class Short(InputElement):
+class Short(TextInputElement):
     pass
 
 
-class Paragraph(InputElement):
+class Paragraph(TextInputElement):
     pass
 
 
@@ -401,9 +407,8 @@ class Page(Element):
     def SUBMIT(cls):
         if cls._SUBMIT is None:
             instance = super().__new__(cls)
+            instance.__init__(Action.SUBMIT, None)
             instance.id = Action.SUBMIT
-            instance.index = Action.SUBMIT
-            instance.next_page = None
             cls._SUBMIT = instance
         return cls._SUBMIT
 
@@ -425,7 +430,7 @@ class Page(Element):
                 self._prev_action = Action.NEXT
         self.index = index
         self.elements = []
-        self.next_page = None
+        self._next_page = None
         self._has_default_next_page = True
 
     def append(self, elem):
@@ -439,10 +444,20 @@ class Page(Element):
         if next_page is None:
             return
         if next_page._prev_action == Action.NEXT:
-            self.next_page = next_page
+            self._next_page = next_page
         else:
-            self.next_page = mapping[next_page._prev_action]
+            self._next_page = mapping[next_page._prev_action]
             self._has_default_next_page = False
+
+    def next_page(self):
+        if self._next_page is None:
+            return None
+
+        next_page = self._next_page
+        for elem in self.elements:
+            if isinstance(elem, ActChoiceInputElement) and elem.next_page is not None:
+                next_page = elem.next_page
+        return next_page
 
     def to_str(self, indent=0, include_answer=False):
         SEPARATOR = '—' * (SEP_WIDTH - indent)
@@ -452,10 +467,10 @@ class Page(Element):
         if self.description:
             title = f'{title}\n{self.description}'
         if not self._has_default_next_page:
-            if self.next_page is Page.SUBMIT():
+            if self._next_page is Page.SUBMIT():
                 title = f'{title} -> Submit'
             else:
-                title = f'{title} -> Page {self.next_page.index + 1}'
+                title = f'{title} -> Page {self._next_page.index + 1}'
         if not self.elements:
             return title
         return '\n'.join(
@@ -486,7 +501,7 @@ class Time(InputElement):
     pass
 
 
-def default_callback(elem: InputElement, page_index, elem_index)  -> Union[ElemValue, EmptyValue]:
+def default_callback(elem: InputElement, page_index, elem_index) -> Union[ElemValue, EmptyValue]:
     if isinstance(elem, Scale) or isinstance(elem, Dropdown):
         return random.choice(elem.options)
     if isinstance(elem, Radio):
