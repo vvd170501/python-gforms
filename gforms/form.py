@@ -13,7 +13,7 @@ from .util import Action, add_indent, SEP_WIDTH
 # based on https://gist.github.com/gcampfield/cb56f05e71c60977ed9917de677f919c
 
 
-class GForm:
+class Form:
     class Index:
         FORM = 1
         DESCRIPTION = 0
