@@ -13,12 +13,16 @@ class Value(Enum):
     EMPTY = auto()
 
 
-ElemValue = Union[str, Option]
-EmptyValue = Literal[Value.EMPTY]
-MultiValue = Union[ElemValue, List[ElemValue]]  # possible multiple choices
-GridValue = List[Union[MultiValue, EmptyValue]]  # choice(s) for each row
+TextValue = str
+ChoiceValue = Union[Option, str]
+MultiChoiceValue = Union[ChoiceValue, List[ChoiceValue]]
+ScaleValue = Union[ChoiceValue, int]
 
-CallbackRetval = Union[MultiValue, GridValue, Value]
+EmptyValue = Literal[Value.EMPTY]
+GridValue = List[Union[MultiChoiceValue, EmptyValue]]  # choice(s) for each row
+ElemValue = Union[TextValue, ScaleValue, ChoiceValue, MultiChoiceValue, GridValue]
+
+CallbackRetval = Union[ElemValue, Value]
 
 
 class ElementType(Enum):
@@ -91,9 +95,7 @@ class InputElement(Element):
         self.required = value[self.Index.REQUIRED]
         self.value = Value.EMPTY
 
-    def submit_id(self, entry_id=None):
-        if entry_id is None:
-            entry_id = self.entry_id
+    def submit_id(self):
         return f'entry.{self.entry_id}'
 
     def set_value(self, value: Union[ElemValue, EmptyValue]):
@@ -140,7 +142,7 @@ class ChoiceInputElement(InputElement):
 
         self.other_value = Value.EMPTY
 
-    def set_value(self, choices: Union[MultiValue, EmptyValue]):
+    def set_value(self, choices: Union[MultiChoiceValue, EmptyValue]):
         self.other_value = Value.EMPTY
         all_choices = self._canonical_form(choices)
         if all_choices is Value.EMPTY:
@@ -158,7 +160,7 @@ class ChoiceInputElement(InputElement):
                 is_other = choice.other
                 choice = choice.value
             else:
-                is_other = choice in available
+                is_other = choice not in available
 
             if is_other:
                 if self.other_option is None:
@@ -222,7 +224,7 @@ class ActChoiceInputElement(ChoiceInputElement):
             if isinstance(option, ActionOption):
                 option._resolve_action(next_page, mapping)
 
-    def set_value(self, choice: Union[ElemValue, EmptyValue]):
+    def set_value(self, choice: Union[ChoiceValue, EmptyValue]):
         super().set_value(choice)
 
         if self.value is not Value.EMPTY and \
@@ -294,7 +296,9 @@ class Scale(ChoiceInputElement):
         labels = value[self.Index.LABELS]
         self.low, self.high = labels
 
-    def set_value(self, value):
+    def set_value(self, value: Union[ScaleValue, EmptyValue]):
+        if isinstance(value, int):
+            value = str(value)
         super().set_value(value)
         if self.value is not Value.EMPTY and len(self.value) > 1:
             raise MultipleValues(self)
@@ -344,15 +348,18 @@ class Grid(ChoiceInputElement):
             for j, choice in enumerate(row):
                 if isinstance(choice, Option):
                     row[j] = choice.value
-        self.value = choices
+        if all(row is Value.EMPTY for row in choices):
+            self.value = Value.EMPTY
+        else:
+            self.value = choices
 
     def payload(self):
         if self.value is Value.EMPTY:
             return {}
         payload = {}
-        for entry_id, choices in zip(self.entry_ids, self.value):
+        for submit_id, choices in zip(self.submit_ids(), self.value):
             if choices is not Value.EMPTY:
-                payload[self.submit_id(entry_id)] = choices
+                payload[submit_id] = choices
         return payload
 
     def to_str(self, indent=0, include_answer=False):
@@ -395,6 +402,7 @@ class Page(Element):
         if cls._SUBMIT is None:
             instance = super().__new__(cls)
             instance.id = Action.SUBMIT
+            instance.index = Action.SUBMIT
             instance.next_page = None
             cls._SUBMIT = instance
         return cls._SUBMIT
@@ -478,8 +486,7 @@ class Time(InputElement):
     pass
 
 
-def default_callback(elem: InputElement, page_index, elem_index) \
-        -> Union[MultiValue, GridValue, EmptyValue]:
+def default_callback(elem: InputElement, page_index, elem_index)  -> Union[ElemValue, EmptyValue]:
     if isinstance(elem, Scale) or isinstance(elem, Dropdown):
         return random.choice(elem.options)
     if isinstance(elem, Radio):

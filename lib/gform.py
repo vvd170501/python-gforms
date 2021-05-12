@@ -96,13 +96,14 @@ class GForm:
         def submit_page(page, history, draft):
             next_page = page.next_page  # TODO move to a separate method
             payload = {}
-            for elem in page.elements:
-                if not isinstance(elem, InputElement):
-                    continue
-                payload.update(elem.payload())
-                if next_page is not None and isinstance(elem, ActChoiceInputElement) and\
-                        elem.next_page is not None:
-                    next_page = elem.next_page
+            if page is not Page.SUBMIT():
+                for elem in page.elements:
+                    if not isinstance(elem, InputElement):
+                        continue
+                    payload.update(elem.payload())
+                    if next_page is not None and isinstance(elem, ActChoiceInputElement) and\
+                            elem.next_page is not None:
+                        next_page = elem.next_page
 
             payload['fbzx'] = self._fbzx
             if next_page is not None:
@@ -119,6 +120,8 @@ class GForm:
 
         submitted = set()
 
+        # Compose pageHistory and draftResponse manually?
+        # In this case, 1-2 requests may be enough
         while next_page is not None:
             submitted.add(next_page)
             sub_result, next_page = submit_page(next_page, history, draft)
