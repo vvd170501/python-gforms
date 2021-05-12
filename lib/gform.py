@@ -99,22 +99,6 @@ class GForm:
             pages_to_submit.add(page)
 
     def submit(self, http):
-        sub_url = re.sub(r'(.+)viewform.*', r'\1formResponse', self.url)
-
-        def submit_page(page, history, draft, continue_):
-            payload = {}
-            for elem in page.elements:
-                if not isinstance(elem, InputElement):
-                    continue
-                payload.update(elem.payload())
-
-            payload['fbzx'] = self._fbzx
-            if continue_:
-                payload['continue'] = 1
-            payload['pageHistory'] = history
-            payload['draftResponse'] = draft
-
-            return http.post(sub_url, data=payload)
 
         res = []
         page = self.pages[0]
@@ -125,7 +109,7 @@ class GForm:
         # In this case, 1-2 requests may be enough
         while page is not None:
             next_page = page.next_page()
-            sub_result = submit_page(page, history, draft, next_page is not None)
+            sub_result = self._submit_page(http, page, history, draft, next_page is not None)
             page = next_page
             res.append(sub_result)
             if sub_result.status_code != 200:
@@ -138,6 +122,22 @@ class GForm:
             if page is None or history is None or page.index != int(history.rsplit(',', 1)[-1]):
                 raise RuntimeError('Incorrect next page', self, res, page)
         return res
+
+    def _submit_page(self, http, page, history, draft, continue_):
+        payload = {}
+        for elem in page.elements:
+            if not isinstance(elem, InputElement):
+                continue
+            payload.update(elem.payload())
+
+        payload['fbzx'] = self._fbzx
+        if continue_:
+            payload['continue'] = 1
+        payload['pageHistory'] = history
+        payload['draftResponse'] = draft
+
+        url = re.sub(r'(.+)viewform.*', r'\1formResponse', self.url)
+        return http.post(url, data=payload)
 
     def _resolve_actions(self):
         mapping = {page.id: page for page in self.pages}

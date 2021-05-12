@@ -95,9 +95,6 @@ class InputElement(Element):
         self.required = value[self.Index.REQUIRED]
         self.value = Value.EMPTY
 
-    def submit_id(self):
-        return f'entry.{self.entry_id}'
-
     def set_value(self, value: Union[ElemValue, EmptyValue]):
         if value is Value.EMPTY and self.required:
             raise RequiredElement(self)
@@ -106,7 +103,7 @@ class InputElement(Element):
     def payload(self):
         if self.value is Value.EMPTY:
             return {}
-        return {self.submit_id(): self.value}
+        return {self._submit_id(): self.value}
 
     def to_str(self, indent=0, include_answer=False):
         s = f'{self.type.name.title()}: {self.name}'
@@ -124,6 +121,9 @@ class InputElement(Element):
         else:
             val = f'"{self.value}"'
         return f'{s}\n> {val}'
+
+    def _submit_id(self):
+        return f'entry.{self.entry_id}'
 
 
 class TextInputElement(InputElement):
@@ -184,12 +184,13 @@ class ChoiceInputElement(InputElement):
     def payload(self):
         if self.value is Value.EMPTY and self.other_value is Value.EMPTY:
             return {}
-        payload = {self.submit_id(): []}
+        main_key = self._submit_id()
+        payload = {main_key: []}
         if self.value is not Value.EMPTY:
-            payload[self.submit_id()] += self.value
+            payload[main_key] += self.value
         if self.other_value is not Value.EMPTY:
-            payload[self.submit_id()].append('__other_option__')
-            other_key = self.submit_id() + '.other_option_response'
+            payload[main_key].append('__other_option__')
+            other_key = main_key + '.other_option_response'
             payload[other_key] = self.other_value
         return payload
 
@@ -225,11 +226,6 @@ class ActChoiceInputElement(ChoiceInputElement):
         super().__init__(elem)
         self.next_page = None
 
-    def _resolve_actions(self, next_page, mapping):
-        for option in self.options:
-            if isinstance(option, ActionOption):
-                option._resolve_action(next_page, mapping)
-
     def set_value(self, choice: Union[ChoiceValue, EmptyValue]):
         super().set_value(choice)
 
@@ -256,8 +252,13 @@ class ActChoiceInputElement(ChoiceInputElement):
             if self.next_page is Page.SUBMIT():
                 s = f'{s}\nGo to SUBMIT'
             else:
-                s = f'{s}\nGo to page {self._next_page.index + 1}'
+                s = f'{s}\nGo to page {self.next_page.index + 1}'
         return s
+
+    def _resolve_actions(self, next_page, mapping):
+        for option in self.options:
+            if isinstance(option, ActionOption):
+                option._resolve_action(next_page, mapping)
 
 
 class Comment(Element):
@@ -363,7 +364,7 @@ class Grid(ChoiceInputElement):
         if self.value is Value.EMPTY:
             return {}
         payload = {}
-        for submit_id, choices in zip(self.submit_ids(), self.value):
+        for submit_id, choices in zip(self._submit_ids(), self.value):
             if choices is not Value.EMPTY:
                 payload[submit_id] = choices
         return payload
@@ -385,6 +386,9 @@ class Grid(ChoiceInputElement):
             s = self._with_answer(s)
         return s
 
+    def _submit_ids(self):
+        return [f'entry.{eid}' for eid in self.entry_ids]
+
     def _with_answer(self, s):
         def row_fmt(row):
             if row is Value.EMPTY:
@@ -395,9 +399,6 @@ class Grid(ChoiceInputElement):
         else:
             val = [f'> {row_fmt(row)}' for row in self.value]
         return '\n'.join([s] + val)
-
-    def submit_ids(self):
-        return [f'entry.{eid}' for eid in self.entry_ids]
 
 
 class Page(Element):
@@ -436,19 +437,6 @@ class Page(Element):
     def append(self, elem):
         self.elements.append(elem)
 
-    def _resolve_actions(self, next_page, mapping):
-        for elem in self.elements:
-            if isinstance(elem, ActChoiceInputElement):
-                elem._resolve_actions(next_page, mapping)
-
-        if next_page is None:
-            return
-        if next_page._prev_action == Action.NEXT:
-            self._next_page = next_page
-        else:
-            self._next_page = mapping[next_page._prev_action]
-            self._has_default_next_page = False
-
     def next_page(self):
         if self._next_page is None:
             return None
@@ -481,6 +469,19 @@ class Page(Element):
                 for elem in self.elements
             ]
         )
+
+    def _resolve_actions(self, next_page, mapping):
+        for elem in self.elements:
+            if isinstance(elem, ActChoiceInputElement):
+                elem._resolve_actions(next_page, mapping)
+
+        if next_page is None:
+            return
+        if next_page._prev_action == Action.NEXT:
+            self._next_page = next_page
+        else:
+            self._next_page = mapping[next_page._prev_action]
+            self._has_default_next_page = False
 
 
 class Date(InputElement):

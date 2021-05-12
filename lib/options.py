@@ -49,14 +49,6 @@ class ActionOption(SelectOption):
         self._action = raw[self.Index.ACTION]
         self.next_page = None
 
-    def _resolve_action(self, next_page, mapping):
-        if next_page is None:
-            return
-        if self._action == Action.NEXT:
-            self.next_page = next_page
-        else:
-            self.next_page = mapping[self._action]
-
     def to_str(self, indent=0):
         from .elements import Page
         s = super().to_str(indent)
@@ -65,3 +57,11 @@ class ActionOption(SelectOption):
         if self.next_page is None:
             return f'{s} -> Ignored'
         return f'{s} -> Go to Page {self.next_page.index + 1}'
+
+    def _resolve_action(self, next_page, mapping):
+        if next_page is None:
+            return
+        if self._action == Action.NEXT:
+            self.next_page = next_page
+        else:
+            self.next_page = mapping[self._action]
