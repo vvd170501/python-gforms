@@ -1,11 +1,16 @@
+from typing import List
+
 import pytest
 
 from gforms import Form
-from gforms.elements import Value
+
+from gforms.elements import Element, Value
 from gforms.elements import Page
 from gforms.elements import Comment, Image, Video
 from gforms.elements import Short, Paragraph
 from gforms.elements import Checkboxes, Dropdown, Grid, Radio, Scale
+from gforms.elements import Date, Time
+
 from gforms.errors import ClosedForm, ParseError
 from gforms.options import ActionOption, Option
 
@@ -35,198 +40,231 @@ class TestEmpty(BaseFormTest):
         assert len(form.pages) == 1 and len(form.pages[0].elements) == 0
 
 
-def check_with_descr(elem, name=None):
-    """Assert that element's name and description were parsed correctly"""
-    if name is None:
-        name = type(elem).__name__
-    assert elem.name == name and elem.description == f'{name}_descr'
-
-
 class TestPages(BaseFormTest):
     form_type = 'pages'
 
-    def test_pages(self, form):
+    def test_page_count(self, form):
         pages = form.pages
         assert len(pages) == 7
-        assert pages[0].name is None
-        check_with_descr(pages[1], 'Page02')
 
+    def test_page_naming(self, form):
+        pages = form.pages
+        assert pages[0].name is None
+        assert pages[1].name == 'Page02'
+        assert pages[1].description == 'Page02_descr'
+
+    def test_transitions(self, form):
+        pages = form.pages
         assert pages[0].next_page() == pages[1]  # default next page
-        assert pages[1].next_page() == pages[0]  # go backwards
-        assert pages[2].next_page() == pages[2]  # loop
-        assert pages[3].next_page() == pages[4]  # expiicit next page
+        assert pages[1].next_page() == pages[0]  # first page (uses Action instead of id)
+        assert pages[2].next_page() == pages[2]  # page id (loop)
+        assert pages[3].next_page() == pages[4]  # page id (next)
         assert pages[5].next_page() is None # submit
         assert pages[6].next_page() is None # last page
 
 
-def get_elements(form, expected, page=0):
-    """Check number of elements on the selected page and return these elements"""
-    elements = form.pages[page].elements
-    assert len(elements) == expected
-    return elements
+class ElementTest(BaseFormTest):
+    expected: List[List[Element]]
+
+    @pytest.fixture(scope='class')
+    def pages(self, form):
+        return [page.elements for page in form.pages]
+
+    @pytest.fixture(scope='class')
+    def first_page(self, pages):
+        return pages[0]
+
+    def test_elements(self, pages):
+        types = [[type(elem) for elem in elements] for elements in pages]
+        assert types == self.expected
 
 
-class TestNonInput(BaseFormTest):
+class TestElements(ElementTest):
+    form_type = 'elements'
+    expected = [[Short, Paragraph, Radio, Checkboxes, Dropdown, Scale, Grid, Date, Time, Comment, Image, Video]]
+
+    def test_naming(self, first_page):
+        for elem in first_page:
+            expected_name = type(elem).__name__
+            expected_descr = f'{expected_name}_descr'
+            assert elem.name == expected_name
+            assert elem.description == expected_descr
+
+
+class TestNonInput(ElementTest):
     form_type = 'non_input'
+    expected = [[Comment, Image, Video]]
 
-    def test_elements(self, form, url):
-        comment, image, video = get_elements(form, 3)
-        assert isinstance(comment, Comment)
-        assert isinstance(image, Image)
-        assert isinstance(video, Video)
-        check_with_descr(comment)
-        check_with_descr(image)
-        check_with_descr(video)
+    def test_video(self, first_page, url):
+        video = first_page[2]
         assert video.url() == url.yt_url
 
 
-class TestTextInput(BaseFormTest):
+class TestTextInput(ElementTest):
     form_type = 'text'
-
-    def test_text(self, form):
-        short, paragraph = get_elements(form, 2)
-        assert isinstance(short, Short)
-        assert isinstance(paragraph, Paragraph)
-        check_with_descr(short)
-        check_with_descr(paragraph)
+    expected = [[Short, Paragraph]]
 
 
-# assuming that name and description are correctly parsed for all further types
-
-
-class TestRequire(BaseFormTest):
+class TestRequired(ElementTest):
     form_type = 'required'
+    expected = [[Short, Short]]
 
-    def test_required(self, form):
-        short_required, short_optional = get_elements(form, 2)
+    def test_required(self, first_page):
+        short_required, short_optional = first_page
         assert short_required.required
         assert not short_optional.required
 
 
-def get_options(elem, expected):
-    options = elem.options
-    assert len(options) == expected
-    return options
+
+class ChoiceElementTest(ElementTest):
+    @staticmethod
+    def get_options(elem, expected):
+        options = elem.options
+        assert len(options) == expected
+        for opt in options:
+            assert not opt.other
+        return options
+
+    @staticmethod
+    def assert_has_other(elem):
+        assert elem.other_option is not None
+        assert elem.other_option.other
+
+    @staticmethod
+    def assert_no_other(elem):
+        assert elem.other_option is None
 
 
-def assert_has_other(elem):
-    assert elem.other_option is not None
-    assert elem.other_option.other
+class ActChoiceElementTest(ChoiceElementTest):
+    @staticmethod
+    def assert_has_actions(elem):
+        for opt in elem.options:
+            assert isinstance(opt, ActionOption)
+        if elem.other_option is not None:
+            assert isinstance(elem.other_option, ActionOption)
 
-
-class TestRadio(BaseFormTest):
-    form_type = 'radio'
-
-    def test_options(self, form):
-        elements = get_elements(form, 3)
-        assert isinstance(elements[0], Radio)  # all other elements are Radio
-        for elem in elements:
-            opt1, opt2 = get_options(elem, 2)
-            assert opt1.value == 'Opt1'
-            assert opt2.value == 'Opt2'
-
-    def test_other(self, form):
-        radio, with_other, _ = get_elements(form, 3)
-        assert all(not opt.other for opt in radio.options)
-        assert radio.other_option is None
-
-        assert all(not opt.other for opt in with_other.options)
-        assert_has_other(with_other)
-
-    def test_actions(self, form):
-        _, with_other, with_other_and_actions = get_elements(form, 3)
-        for opt in with_other.options:
+    @staticmethod
+    def assert_no_actions(elem):
+        for opt in elem.options:
             assert not isinstance(opt, ActionOption)
-        assert not isinstance(with_other.other_option, ActionOption)
+        if elem.other_option is not None:
+            assert not isinstance(elem.other_option, ActionOption)
 
-        opt1, opt2, other = *with_other_and_actions.options, with_other_and_actions.other_option
-        assert isinstance(opt1, ActionOption)
-        assert isinstance(opt2, ActionOption)
-        assert isinstance(other, ActionOption)
+    @staticmethod
+    def assert_ignored_actions(elem):
+        for opt in elem.options:
+            assert opt.next_page is None
+        if elem.other_option is not None:
+            assert elem.other_option.next_page is None
+
+
+class TestRadio(ActChoiceElementTest):
+    form_type = 'radio'
+    expected = [[Radio, Radio, Radio], [Radio]]
+
+    def test_options(self, pages):
+        for page in pages:
+            for elem in page:
+                opt1, opt2 = self.get_options(elem, 2)
+                assert opt1.value == 'Opt1'
+                assert opt2.value == 'Opt2'
+
+    def test_other(self, first_page):
+        radio, with_other, with_other_and_actions = first_page
+        self.assert_no_other(radio)
+        self.assert_has_other(with_other)
+        self.assert_has_other(with_other_and_actions)
+
+    def test_actions(self, form, first_page):
+        _, with_other, with_other_and_actions = first_page
+        self.assert_no_actions(with_other)
+        self.assert_has_actions(with_other_and_actions)
+
+        opt1, opt2 = with_other_and_actions.options
+        other = with_other_and_actions.other_option
         assert opt1.next_page == form.pages[1]  # default next page
-        assert opt2.next_page == form.pages[0]  # loop (explicit page)
+        assert opt2.next_page == form.pages[0]  # page id (loop)
         assert other.next_page == Page.SUBMIT()
 
-    def test_actions_ignored(self, form):
-        with_other_and_actions = get_elements(form, 1, page=1)[0]
-        assert all (opt.next_page is None for opt in with_other_and_actions.options)
-        assert with_other_and_actions.other_option.next_page is None
+    def test_ignored_actions_ignored(self, pages):
+        self.assert_ignored_actions(pages[1][0])
 
 
-class TestDropdown(BaseFormTest):
+class TestDropdown(ActChoiceElementTest):
     form_type = 'dropdown'
+    expected = [[Dropdown, Dropdown], [Dropdown]]
 
-    # Maybe it's better to create a test class for ActChoiceInputElement and another one for "Other" options
-    def test_options(self, form):
-        elements = get_elements(form, 2)
-        assert isinstance(elements[0], Dropdown)
-        for elem in elements:
-            opt1, opt2 = get_options(elem, 2)
-            assert opt1.value == 'Opt1'
-            assert opt2.value == 'Opt2'
+    def test_options(self, pages):
+        for page in pages:
+            for elem in page:
+                opt1, opt2, opt3 = self.get_options(elem, 3)
+                assert opt1.value == 'Opt1'
+                assert opt2.value == 'Opt2'
+                assert opt3.value == 'Opt3'
 
-    def test_actions(self, form):
-        dropdown, with_actions = get_elements(form, 2)
-        for opt in dropdown.options:
-            assert not isinstance(opt, ActionOption)
+    def test_actions(self, first_page, form):
+        dropdown, with_actions = first_page
+        self.assert_no_actions(dropdown)
+        self.assert_has_actions(with_actions)
 
-        opt1, opt2 = with_actions.options
-        assert isinstance(opt1, ActionOption)
-        assert isinstance(opt2, ActionOption)
+        opt1, opt2, opt3 = with_actions.options
         assert opt1.next_page == form.pages[1]  # default next page
-        assert opt2.next_page == form.pages[0]  # loop (explicit page)
+        assert opt2.next_page == form.pages[0]  # page id (loop)
+        assert opt3.next_page == Page.SUBMIT()
 
-    def test_actions_ignored(self, form):
-        dropdown = get_elements(form, 1, page=1)[0]
-        assert all (opt.next_page is None for opt in dropdown.options)
+    def test_ignored_actions_ignored(self, pages):
+        self.assert_ignored_actions(pages[1][0])
 
 
-class TestCheckboxes(BaseFormTest):
+class TestCheckboxes(ChoiceElementTest):
     form_type = 'checkboxes'
+    expected = [[Checkboxes, Checkboxes]]
 
-    def test_options(self, form):
-        elements = get_elements(form, 2)
-        assert isinstance(elements[0], Checkboxes)
-        for elem in elements:
-            opt1, opt2 = get_options(elem, 2)
+    def test_options(self, first_page):
+        for elem in first_page:
+            opt1, opt2 = self.get_options(elem, 2)
             assert opt1.value == 'Opt1'
-            assert not opt1.other
             assert opt2.value == 'Opt2'
-            assert not opt2.other
 
-    def test_other(self, form):
-        checkboxes, with_other = get_elements(form, 2)
-        assert checkboxes.other_option is None
-        assert_has_other(with_other)
+    def test_other(self, first_page):
+        checkboxes, with_other = first_page
+        self.assert_no_other(checkboxes)
+        self.assert_has_other(with_other)
 
 
-class TestScale(BaseFormTest):
+class TestScale(ChoiceElementTest):
     form_type = 'scale'
+    expected = [[Scale, Scale]]
 
-    def test_options(self, form):
-        scale5, scale10 = get_elements(form, 2)
-        assert isinstance(scale5, Scale)
+    def test_options(self, first_page):
+        scale5, scale10 = first_page
         assert scale5.low == 'Low'
         assert scale5.high == 'High'
-        opts5 = get_options(scale5, 5)
-        assert all(int(opt.value) == i for opt, i in zip(opts5, range(1, 6)))
-        opts10 = get_options(scale10, 10)
-        assert all(int(opt.value) == i for opt, i in zip(opts10, range(1, 11)))
+
+        opts5 = self.get_options(scale5, 5)
+        for opt, i in zip (opts5, range(1, 6)):
+            assert int(opt.value) == i
+        opts10 = self.get_options(scale10, 10)
+        for opt, i in zip (opts10, range(1, 11)):
+            assert int(opt.value) == i
 
 
-class TestGrid(BaseFormTest):
+class TestGrid(ChoiceElementTest):
     form_type = 'grid'
+    expected = [[Grid, Grid]]
 
-    def test_radio_grid(self, form):
-        grid, _ = get_elements(form, 2)
-        assert isinstance(grid, Grid)
+    def test_options(self, first_page):
+        for grid in first_page:
+            assert len(grid.rows) == len(grid.cols) == 3
+            assert [opt.value for opt in grid.cols] == ['C1', 'C2', 'C3']
+            assert grid.rows == ['R1', 'R2', 'R3']
+
+    def test_radio_grid(self, first_page):
+        grid = first_page[0]
         assert not grid.multichoice
-        assert len(grid.rows) == len(grid.cols) == 3
-        assert [opt.value for opt in grid.cols] == ['C1', 'C2', 'C3']
-        assert grid.rows == ['R1', 'R2', 'R3']
 
-    def test_checkbox_grid(self, form):
-        _, grid = get_elements(form, 2)
+    def test_checkbox_grid(self, first_page):
+        grid = first_page[1]
         assert grid.multichoice
 
 
