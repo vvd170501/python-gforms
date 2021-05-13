@@ -44,6 +44,8 @@ class Form:
         self.description = form[self.Index.DESCRIPTION]
         self.pages = [Page(0)]
 
+        if form[self.Index.FIELDS] is None:
+            return
         for elem in form[self.Index.FIELDS]:
             el_type = ElementType(elem[Element.Index.TYPE])
             if el_type == ElementType.PAGE:
