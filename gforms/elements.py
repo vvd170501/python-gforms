@@ -455,7 +455,7 @@ class Page(Element):
         if self.description:
             title = f'{title}\n{self.description}'
         if not self._has_default_next_page:
-            if self._next_page is Page.SUBMIT():
+            if self._next_page is None:
                 title = f'{title} -> Submit'
             else:
                 title = f'{title} -> Page {self._next_page.index + 1}'
@@ -477,6 +477,10 @@ class Page(Element):
 
         if next_page is None:
             return
+        if next_page._prev_action == Action.SUBMIT:
+            self._has_default_next_page = False
+            return
+
         if next_page._prev_action == Action.NEXT:
             self._next_page = next_page
         else:

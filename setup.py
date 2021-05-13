@@ -11,4 +11,10 @@ setup(
         'requests',
         'beautifulsoup4',
     ],
+    extras_require={
+        'dev': [
+            'pytest',
+        ]
+    }
+
 )
