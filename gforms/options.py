@@ -4,14 +4,15 @@ from .util import Action
 class Option:
     class Index:
         VALUE = 0
+        ACTION = 2
+        OTHER = 4
+        IMAGE = 5  # not implemented
 
     @classmethod
     def parse(cls, raw):
-        if len(raw) == 1:  # scale or grid
-            return SimpleOption(raw)
-        if raw[SelectOption.Index.ACTION] is None:
-            return SelectOption(raw)
-        return ActionOption(raw)
+        if len(raw) > cls.Index.ACTION and raw[cls.Index.ACTION] is not None:
+            return ActionOption(raw)
+        return SelectOption(raw)
 
     def __init__(self, raw):
         self.value = raw[self.Index.VALUE]
@@ -23,19 +24,14 @@ class Option:
         return self.value
 
 
-class SimpleOption(Option):
-    pass
-
-
 class SelectOption(Option):
-    class Index(Option.Index):
-        ACTION = 2
-        OTHER = 4
-        IMAGE = 5  # not implemented
 
     def __init__(self, raw):
         super().__init__(raw)
-        self.other = raw[self.Index.OTHER]
+        self.other = False
+        # len(raw) == 1 for Scale options or if the element has only one option (without actions)
+        if len(raw) > self.Index.OTHER:
+            self.other = raw[self.Index.OTHER]
 
     def to_str(self, indent=0):
         if self.other:
