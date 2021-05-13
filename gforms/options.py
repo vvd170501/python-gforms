@@ -12,26 +12,17 @@ class Option:
     def parse(cls, raw):
         if len(raw) > cls.Index.ACTION and raw[cls.Index.ACTION] is not None:
             return ActionOption(raw)
-        return SelectOption(raw)
+        return Option(raw)
 
     def __init__(self, raw):
         self.value = raw[self.Index.VALUE]
-
-    def __str__(self):
-        return self.value
-
-    def to_str(self, indent=0):
-        return self.value
-
-
-class SelectOption(Option):
-
-    def __init__(self, raw):
-        super().__init__(raw)
         self.other = False
         # len(raw) == 1 for Scale options or if the element has only one option (without actions)
         if len(raw) > self.Index.OTHER:
             self.other = raw[self.Index.OTHER]
+
+    def __str__(self):
+        return self.value
 
     def to_str(self, indent=0):
         if self.other:
@@ -39,7 +30,7 @@ class SelectOption(Option):
         return self.value
 
 
-class ActionOption(SelectOption):
+class ActionOption(Option):
     def __init__(self, raw):
         super().__init__(raw)
         self._action = raw[self.Index.ACTION]
