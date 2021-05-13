@@ -1,3 +1,17 @@
+class ParseError(ValueError):
+    def __init__(self, form):
+        super().__init__()
+        self.form = form
+
+    def __str__(self):
+        return f'Cannot parse form with URL {self.form.url}'
+
+
+class ClosedForm(ParseError):
+    def __str__(self):
+        return f'Form "{self.form.title}" is closed'
+
+
 class ValidationError(ValueError):
     pass
 

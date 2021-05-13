@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup as BS
 
 from .elements import ElementType, Element, InputElement, Page, Value
 from .elements import CallbackRetval, default_callback
-from .errors import InfiniteLoop
+from .errors import ClosedForm, InfiniteLoop, ParseError
 from .util import Action, add_indent, SEP_WIDTH
 
 
@@ -34,13 +34,20 @@ class Form:
         params = {'usp': 'form_confirm'} if resend else None
         page = http.get(self.url, params=params)
         soup = BS(page.text, 'html.parser')
+        if page.url.endswith('closedform'):
+            self.title = soup.find('title').text
+            raise ClosedForm(self)
         self._fbzx = self._get_fbzx(soup)
+        if self._fbzx is None:
+            raise ParseError(self)
         self._history = self._get_history(soup)
         self._draft = self._get_draft(soup)
         data = self._raw_form(soup)
-        self.name = data[self.Index.NAME]  # not shown anywhere (?)
+        self.name = data[self.Index.NAME]
         form = data[self.Index.FORM]
         self.title = form[self.Index.TITLE]
+        if not self.title:
+            self.title = self.name
         self.description = form[self.Index.DESCRIPTION]
         self.pages = [Page(0)]
 
@@ -148,22 +155,23 @@ class Form:
             page._resolve_actions(next_page, mapping)
 
     @staticmethod
+    def _get_input(soup, name):
+        elem = soup.find('input', {'name': name})
+        if elem is None:
+            return None
+        return elem['value']
+
+    @staticmethod
     def _get_fbzx(soup):
-        return soup.find('input', {'name': 'fbzx'})['value']
+        return Form._get_input(soup, 'fbzx')
 
     @staticmethod
     def _get_history(soup):
-        history = soup.find('input', {'name': 'pageHistory'})
-        if history is None:
-            return None
-        return history['value']
+        return Form._get_input(soup, 'pageHistory')
 
     @staticmethod
     def _get_draft(soup):
-        draft = soup.find('input', {'name': 'draftResponse'})
-        if draft is None:
-            return None
-        return draft['value']
+        return Form._get_input(soup, 'draftResponse')
 
     @staticmethod
     def _raw_form(soup):
