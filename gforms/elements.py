@@ -66,19 +66,16 @@ class Element:
         self.type = ElementType(elem[self.Index.TYPE])
 
     def to_str(self, indent=0, **kwargs):
-        s = f'{self.type.name.title()}: {self.name}'
+        s = f'{self.type.name.title()}'
+        if self.name:
+            s = f'{s}: {self.name}'
         if self.description:
             s = f'{s}\n{self.description}'
         return s
 
 
 class MediaElement(Element):
-    # elem[6][0] - image url (?)
-    def to_str(self, indent=0, **kwargs):
-        tp = self.type.name.title()
-        if self.name:
-            return f'{tp}: {self.name}'
-        return tp
+    pass
 
 
 class InputElement(Element):
@@ -266,11 +263,27 @@ class Comment(Element):
 
 
 class Image(MediaElement):
+    # elem[6][0] - cosmoId (no direct link?)
+    # search "google docs cosmoid" for more details
+    # NOTE some input elements or options may contain attached images (parsing is not implemented)
     pass
 
 
 class Video(MediaElement):
-    pass
+    class Index(MediaElement.Index):
+        VIDEO = 6
+        LINK = 3
+
+    def __init__(self, elem):
+        super().__init__(elem)
+        self._link = elem[self.Index.VIDEO][self.Index.LINK]
+
+    def url(self):
+        return f'https://youtu.be/{self._link}'
+
+    def to_str(self, indent=0, **kwargs):
+        s = super().to_str(indent, **kwargs)
+        return f'{s}\n{self.url()}'
 
 
 class Short(TextInputElement):
