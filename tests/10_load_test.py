@@ -2,9 +2,7 @@ from typing import List
 
 import pytest
 
-from gforms import Form
-
-from gforms.elements import Element, Value
+from gforms.elements import Element
 from gforms.elements import Page
 from gforms.elements import Comment, Image, Video
 from gforms.elements import Short, Paragraph
@@ -12,7 +10,7 @@ from gforms.elements import Checkboxes, Dropdown, Grid, Radio, Scale
 from gforms.elements import Date, Time
 
 from gforms.errors import ClosedForm, ParseError
-from gforms.options import ActionOption, Option
+from gforms.options import ActionOption
 
 from .util import BaseFormTest
 
@@ -23,11 +21,11 @@ BASIC_FORM_URL = ''
 class TestFormLoad:
     def test(self, load_form):
         with pytest.raises(ParseError):
-            form = load_form('https://docs.google.com/forms/d/e/00000000000000000000000000000000000000000000000000000000/viewform')
+            load_form('https://docs.google.com/forms/d/e/00000000000000000000000000000000000000000000000000000000/viewform')
 
     def test_closed(self, load_form):
         with pytest.raises(ClosedForm):
-            form = load_form('https://docs.google.com/forms/d/e/1FAIpQLSeq_yONm2qxkvvuY5BI9E3-rDD7RxIQHo9-R_-hy1mZlborKA/viewform')
+            load_form('https://docs.google.com/forms/d/e/1FAIpQLSeq_yONm2qxkvvuY5BI9E3-rDD7RxIQHo9-R_-hy1mZlborKA/viewform')
 
 
 class TestEmpty(BaseFormTest):
@@ -59,8 +57,8 @@ class TestPages(BaseFormTest):
         assert pages[1].next_page() == pages[0]  # first page (uses Action instead of id)
         assert pages[2].next_page() == pages[2]  # page id (loop)
         assert pages[3].next_page() == pages[4]  # page id (next)
-        assert pages[5].next_page() is None # submit
-        assert pages[6].next_page() is None # last page
+        assert pages[5].next_page() is None  # submit
+        assert pages[6].next_page() is None  # last page
 
 
 class ElementTest(BaseFormTest):
@@ -81,7 +79,12 @@ class ElementTest(BaseFormTest):
 
 class TestElements(ElementTest):
     form_type = 'elements'
-    expected = [[Short, Paragraph, Radio, Checkboxes, Dropdown, Scale, Grid, Date, Time, Comment, Image, Video]]
+    expected = [[
+        Short, Paragraph,
+        Radio, Checkboxes, Dropdown, Scale, Grid,
+        Date, Time,
+        Comment, Image, Video
+    ]]
 
     def test_naming(self, first_page):
         for elem in first_page:
@@ -113,7 +116,6 @@ class TestRequired(ElementTest):
         short_required, short_optional = first_page
         assert short_required.required
         assert not short_optional.required
-
 
 
 class ChoiceElementTest(ElementTest):
@@ -242,10 +244,10 @@ class TestScale(ChoiceElementTest):
         assert scale5.high == 'High'
 
         opts5 = self.get_options(scale5, 5)
-        for opt, i in zip (opts5, range(1, 6)):
+        for opt, i in zip(opts5, range(1, 6)):
             assert int(opt.value) == i
         opts10 = self.get_options(scale10, 10)
-        for opt, i in zip (opts10, range(1, 11)):
+        for opt, i in zip(opts10, range(1, 11)):
             assert int(opt.value) == i
 
 
