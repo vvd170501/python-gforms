@@ -1,13 +1,14 @@
 import json
 import re
-from typing import Callable
+from typing import Callable, Optional
 
-from bs4 import BeautifulSoup as BS
+from bs4 import BeautifulSoup
 
-from .elements import ElementType, Element, InputElement, Page, Value
-from .elements import CallbackRetval, default_callback
+from .elements_base import Element, InputElement
+from .elements import Action, ElementType, Page, Value, parse as parse_element
+from .elements import CallbackRetVal, default_callback
 from .errors import ClosedForm, InfiniteLoop, ParseError
-from .util import Action, add_indent, SEP_WIDTH
+from .util import add_indent, page_separator
 
 
 # based on https://gist.github.com/gcampfield/cb56f05e71c60977ed9917de677f919c
@@ -25,6 +26,9 @@ class Form:
     def __init__(self, url):
         self.url = url
         self._fbzx = None
+        self._history = None
+        self._draft = None
+        self.name = None
         self.title = None
         self.description = None
         self.pages = None
@@ -33,7 +37,7 @@ class Form:
         # does resend actually matter?
         params = {'usp': 'form_confirm'} if resend else None
         page = http.get(self.url, params=params)
-        soup = BS(page.text, 'html.parser')
+        soup = BeautifulSoup(page.text, 'html.parser')
         if page.url.endswith('closedform'):
             self.title = soup.find('title').text
             raise ClosedForm(self)
@@ -49,29 +53,29 @@ class Form:
         if not self.title:
             self.title = self.name
         self.description = form[self.Index.DESCRIPTION]
-        self.pages = [Page(0)]
+        self.pages = [Page.first()]
 
         if form[self.Index.FIELDS] is None:
             return
         for elem in form[self.Index.FIELDS]:
             el_type = ElementType(elem[Element.Index.TYPE])
             if el_type == ElementType.PAGE:
-                self.pages.append(Page(len(self.pages), elem))
+                self.pages.append(Page.parse(elem).with_index(len(self.pages)))
                 continue
-            self.pages[-1].append(Element.parse(elem))
+            self.pages[-1].append(parse_element(elem))
         self._resolve_actions()
 
     def to_str(self, indent=0, include_answer=False):
-        SEPARATOR = '=' * SEP_WIDTH
         if self.description:
             title = f'{self.title}\n{self.description}'
         else:
             title = self.title
+        separator = page_separator(indent)
         lines = '\n'.join(
-            [SEPARATOR] +
+            [separator] +
             [
                 add_indent(page.to_str(indent=indent, include_answer=include_answer), indent) +
-                '\n' + SEPARATOR
+                '\n' + separator
                 for page in self.pages
             ]
         )
@@ -79,7 +83,7 @@ class Form:
 
     def fill(
                 self,
-                callback: Callable[[InputElement, int, int], CallbackRetval] = None,
+                callback: Optional[Callable[[InputElement, int, int], CallbackRetVal]] = None,
                 fill_optional=False
             ):
         """
@@ -89,7 +93,7 @@ class Form:
             for elem_index, elem in enumerate(page.elements):
                 if not isinstance(elem, InputElement):
                     continue
-                value = Value.EMPTY
+                value: CallbackRetVal = Value.EMPTY
                 if callback is not None:
                     value = callback(elem, page.index, elem_index)
                     if value is None:  # just in case (if callback doesn't return anything)
@@ -123,7 +127,7 @@ class Form:
             res.append(sub_result)
             if sub_result.status_code != 200:
                 raise RuntimeError('Invalid response code', res)
-            soup = BS(sub_result.text, 'html.parser')
+            soup = BeautifulSoup(sub_result.text, 'html.parser')
             history = self._get_history(soup)
             draft = self._get_draft(soup)
             if page is None and history is None:
@@ -150,9 +154,9 @@ class Form:
 
     def _resolve_actions(self):
         mapping = {page.id: page for page in self.pages}
-        mapping[Action.SUBMIT] = Page.SUBMIT()
+        mapping[Action.SUBMIT] = Page.SUBMIT
         for (page, next_page) in zip(self.pages, self.pages[1:] + [None]):
-            page._resolve_actions(next_page, mapping)
+            page.resolve_actions(next_page, mapping)
 
     @staticmethod
     def _get_input(soup, name):

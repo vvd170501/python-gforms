@@ -1,6 +1,3 @@
-from .util import Action
-
-
 class Option:
     class Index:
         VALUE = 0
@@ -9,17 +6,23 @@ class Option:
         IMAGE = 5  # not implemented
 
     @classmethod
-    def parse(cls, raw):
-        if len(raw) > cls.Index.ACTION and raw[cls.Index.ACTION] is not None:
-            return ActionOption(raw)
-        return Option(raw)
+    def parse(cls, option):
+        return cls(**cls._parse(option))
 
-    def __init__(self, raw):
-        self.value = raw[self.Index.VALUE]
-        self.other = False
-        # len(raw) == 1 for Scale options or if the element has only one option (without actions)
-        if len(raw) > self.Index.OTHER:
-            self.other = bool(raw[self.Index.OTHER])
+    @classmethod
+    def _parse(cls, option):
+        res = {
+            'value': option[cls.Index.VALUE],
+            'other': False,
+        }
+        # len(option) == 1 for Scale options or if the element has only one option with no actions
+        if len(option) > cls.Index.OTHER:
+            res['other'] = bool(option[cls.Index.OTHER])
+        return res
+
+    def __init__(self, *, value, other):
+        self.value = value
+        self.other = other
 
     def __str__(self):
         return self.value
@@ -31,24 +34,39 @@ class Option:
 
 
 class ActionOption(Option):
-    def __init__(self, raw):
-        super().__init__(raw)
-        self._action = raw[self.Index.ACTION]
+    @classmethod
+    def _parse(cls, option):
+        res = super()._parse(option)
+        res.update({
+            'action': option[cls.Index.ACTION],
+        })
+        return res
+
+    def __init__(self, *, action, **kwargs):
+        super().__init__(**kwargs)
+        self._action = action
         self.next_page = None
 
     def to_str(self, indent=0):
         from .elements import Page
         s = super().to_str(indent)
-        if self.next_page is Page.SUBMIT():
+        if self.next_page is Page.SUBMIT:
             return f'{s} -> Submit'
         if self.next_page is None:
             return f'{s} -> Ignored'
         return f'{s} -> Go to Page {self.next_page.index + 1}'
 
-    def _resolve_action(self, next_page, mapping):
+    def resolve_action(self, next_page, mapping):
+        from .elements import Action
         if next_page is None:
             return
         if self._action == Action.NEXT:
             self.next_page = next_page
         else:
-            self.next_page = mapping[self._action]
+            self.next_page = mapping[self._action]  # FIXME action == -1 - first page (?)
+
+
+def parse(option):
+    if len(option) > Option.Index.ACTION and option[Option.Index.ACTION] is not None:
+        return ActionOption.parse(option)
+    return Option.parse(option)

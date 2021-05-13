@@ -4,17 +4,19 @@ import random
 SEP_WIDTH = 50
 
 
+def page_separator(indent):
+    return '=' * SEP_WIDTH
+
+
+def elem_separator(indent):
+    return '—' * (SEP_WIDTH - indent)
+
+
 def add_indent(text, indent):
     if not indent:
         return text
     spaces = ' ' * indent
     return ''.join(spaces + line for line in text.splitlines(keepends=True))
-
-
-class Action:
-    FIRST = -1
-    NEXT = -2
-    SUBMIT = -3
 
 
 def random_subset(a, nonempty=True):

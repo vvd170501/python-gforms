@@ -2,12 +2,13 @@ from typing import List
 
 import pytest
 
-from gforms.elements import Element
+from gforms.elements_base import Element
 from gforms.elements import Page
 from gforms.elements import Comment, Image, Video
 from gforms.elements import Short, Paragraph
-from gforms.elements import Checkboxes, Dropdown, Grid, Radio, Scale
-from gforms.elements import Date, Time
+from gforms.elements import Checkboxes, Dropdown, Radio, Scale
+from gforms.elements import CheckboxGrid, RadioGrid
+from gforms.elements import Date, DateTime, Time, Duration
 
 from gforms.errors import ClosedForm, ParseError
 from gforms.options import ActionOption
@@ -81,8 +82,9 @@ class TestElements(ElementTest):
     form_type = 'elements'
     expected = [[
         Short, Paragraph,
-        Radio, Checkboxes, Dropdown, Scale, Grid,
-        Date, Time,
+        Radio, Checkboxes, Dropdown, Scale,
+        RadioGrid, CheckboxGrid,
+        Date, Time, Duration,
         Comment, Image, Video
     ]]
 
@@ -142,21 +144,21 @@ class ActChoiceElementTest(ChoiceElementTest):
     def assert_has_actions(elem):
         for opt in elem.options:
             assert isinstance(opt, ActionOption)
-        if elem.other_option is not None:
+        if getattr(elem, 'other_option', None) is not None:
             assert isinstance(elem.other_option, ActionOption)
 
     @staticmethod
     def assert_no_actions(elem):
         for opt in elem.options:
             assert not isinstance(opt, ActionOption)
-        if elem.other_option is not None:
+        if getattr(elem, 'other_option', None) is not None:
             assert not isinstance(elem.other_option, ActionOption)
 
     @staticmethod
     def assert_ignored_actions(elem):
         for opt in elem.options:
             assert opt.next_page is None
-        if elem.other_option is not None:
+        if getattr(elem, 'other_option', None) is not None:
             assert elem.other_option.next_page is None
 
 
@@ -186,9 +188,9 @@ class TestRadio(ActChoiceElementTest):
         other = with_other_and_actions.other_option
         assert opt1.next_page == form.pages[1]  # default next page
         assert opt2.next_page == form.pages[0]  # page id (loop)
-        assert other.next_page == Page.SUBMIT()
+        assert other.next_page == Page.SUBMIT
 
-    def test_ignored_actions_ignored(self, pages):
+    def test_ignored_actions(self, pages):
         self.assert_ignored_actions(pages[1][0])
 
 
@@ -212,9 +214,9 @@ class TestDropdown(ActChoiceElementTest):
         opt1, opt2, opt3 = with_actions.options
         assert opt1.next_page == form.pages[1]  # default next page
         assert opt2.next_page == form.pages[0]  # page id (loop)
-        assert opt3.next_page == Page.SUBMIT()
+        assert opt3.next_page == Page.SUBMIT
 
-    def test_ignored_actions_ignored(self, pages):
+    def test_ignored_actions(self, pages):
         self.assert_ignored_actions(pages[1][0])
 
 
@@ -253,7 +255,7 @@ class TestScale(ChoiceElementTest):
 
 class TestGrid(ChoiceElementTest):
     form_type = 'grid'
-    expected = [[Grid, Grid]]
+    expected = [[RadioGrid, CheckboxGrid]]
 
     def test_options(self, first_page):
         for grid in first_page:
@@ -261,36 +263,19 @@ class TestGrid(ChoiceElementTest):
             assert [opt.value for opt in grid.cols] == ['C1', 'C2', 'C3']
             assert grid.rows == ['R1', 'R2', 'R3']
 
-    def test_radio_grid(self, first_page):
-        grid = first_page[0]
-        assert not grid.multichoice
-
-    def test_checkbox_grid(self, first_page):
-        grid = first_page[1]
-        assert grid.multichoice
-
 
 class TestDate(ElementTest):
     form_type = 'date'
-    expected = [[Date] * 4]
+    expected = [[Date, DateTime, Date, DateTime]]
 
-    def test_flags(self, first_page):
+    def test_year(self, first_page):
         ymd, ymdt, md, mdt = first_page
         assert ymd.has_year
         assert ymdt.has_year
         assert not md.has_year
         assert not mdt.has_year
 
-        assert not ymd.has_time
-        assert ymdt.has_time
-        assert not md.has_time
-        assert mdt.has_time
 
-
-@pytest.mark.skip()
 class TestTime(ElementTest):
     form_type = 'time'
-    expected = [[Time, Time]]
-
-    def test_type(self):
-        pass
+    expected = [[Time, Duration]]
