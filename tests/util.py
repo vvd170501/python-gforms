@@ -13,3 +13,10 @@ def skip_requests_exceptions(func):
             pytest.skip(f'Requests error: {e}')
 
     return wrapper
+
+
+class BaseFormTest:
+    @pytest.fixture(scope='class')
+    def form(self, load_form, url):
+        link = getattr(url, self.form_type)
+        return load_form(link)

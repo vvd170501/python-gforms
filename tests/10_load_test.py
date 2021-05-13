@@ -5,11 +5,11 @@ from gforms.elements import Value
 from gforms.elements import Page
 from gforms.elements import Comment, Image, Video
 from gforms.elements import Short, Paragraph
-from gforms.elements import Checkboxes, Dropdown, Grid, Radio
+from gforms.elements import Checkboxes, Dropdown, Grid, Radio, Scale
 from gforms.errors import ClosedForm, ParseError
 from gforms.options import ActionOption, Option
 
-from .util import skip_requests_exceptions
+from .util import BaseFormTest
 
 
 BASIC_FORM_URL = ''
@@ -25,14 +25,7 @@ class TestFormLoad:
             form = load_form('https://docs.google.com/forms/d/e/1FAIpQLSeq_yONm2qxkvvuY5BI9E3-rDD7RxIQHo9-R_-hy1mZlborKA/viewform')
 
 
-class BaseTest:
-    @pytest.fixture(scope='class')
-    def form(self, load_form, url):
-        link = getattr(url, self.form_type)
-        return load_form(link)
-
-
-class TestEmpty(BaseTest):
+class TestEmpty(BaseFormTest):
     form_type = 'empty'
 
     def test_empty(self, form):
@@ -49,7 +42,7 @@ def check_with_descr(elem, name=None):
     assert elem.name == name and elem.description == f'{name}_descr'
 
 
-class TestPages(BaseTest):
+class TestPages(BaseFormTest):
     form_type = 'pages'
 
     def test_pages(self, form):
@@ -73,7 +66,7 @@ def get_elements(form, expected, page=0):
     return elements
 
 
-class TestNonInput(BaseTest):
+class TestNonInput(BaseFormTest):
     form_type = 'non_input'
 
     def test_elements(self, form, url):
@@ -87,7 +80,7 @@ class TestNonInput(BaseTest):
         assert video.url() == url.yt_url
 
 
-class TestTextInput(BaseTest):
+class TestTextInput(BaseFormTest):
     form_type = 'text'
 
     def test_text(self, form):
@@ -98,7 +91,10 @@ class TestTextInput(BaseTest):
         check_with_descr(paragraph)
 
 
-class TestRequire(BaseTest):
+# assuming that name and description are correctly parsed for all further types
+
+
+class TestRequire(BaseFormTest):
     form_type = 'required'
 
     def test_required(self, form):
@@ -118,7 +114,7 @@ def assert_has_other(elem):
     assert elem.other_option.other
 
 
-class TestRadio(BaseTest):
+class TestRadio(BaseFormTest):
     form_type = 'radio'
 
     def test_options(self, form):
@@ -157,7 +153,7 @@ class TestRadio(BaseTest):
         assert with_other_and_actions.other_option.next_page is None
 
 
-class TestDropdown(BaseTest):
+class TestDropdown(BaseFormTest):
     form_type = 'dropdown'
 
     # Maybe it's better to create a test class for ActChoiceInputElement and another one for "Other" options
@@ -185,7 +181,7 @@ class TestDropdown(BaseTest):
         assert all (opt.next_page is None for opt in dropdown.options)
 
 
-class TestCheckboxes(BaseTest):
+class TestCheckboxes(BaseFormTest):
     form_type = 'checkboxes'
 
     def test_options(self, form):
@@ -202,3 +198,41 @@ class TestCheckboxes(BaseTest):
         checkboxes, with_other = get_elements(form, 2)
         assert checkboxes.other_option is None
         assert_has_other(with_other)
+
+
+class TestScale(BaseFormTest):
+    form_type = 'scale'
+
+    def test_options(self, form):
+        scale5, scale10 = get_elements(form, 2)
+        assert isinstance(scale5, Scale)
+        assert scale5.low == 'Low'
+        assert scale5.high == 'High'
+        opts5 = get_options(scale5, 5)
+        assert all(int(opt.value) == i for opt, i in zip(opts5, range(1, 6)))
+        opts10 = get_options(scale10, 10)
+        assert all(int(opt.value) == i for opt, i in zip(opts10, range(1, 11)))
+
+
+class TestGrid(BaseFormTest):
+    form_type = 'grid'
+
+    def test_radio_grid(self, form):
+        grid, _ = get_elements(form, 2)
+        assert isinstance(grid, Grid)
+        assert not grid.multichoice
+        assert len(grid.rows) == len(grid.cols) == 3
+        assert [opt.value for opt in grid.cols] == ['C1', 'C2', 'C3']
+        assert grid.rows == ['R1', 'R2', 'R3']
+
+    def test_checkbox_grid(self, form):
+        _, grid = get_elements(form, 2)
+        assert grid.multichoice
+
+
+class TestDate(BaseFormTest):
+    pass
+
+
+class TestTime(BaseFormTest):
+    pass

@@ -351,6 +351,7 @@ class Grid(ChoiceInputElement):
         value = elem[self.Index.VALUE]
         self.entry_ids = [row[self.Index.ENTRY_ID] for row in value]
         self.rows = [row[self.Index.ROW_NAME][0] for row in value]
+        self.cols = self.options  # alias
         self.multichoice = value[0][self.Index.MULTICHOICE][0]
 
     def set_value(self, choices: Union[GridValue, EmptyValue]):
