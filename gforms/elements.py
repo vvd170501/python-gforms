@@ -193,7 +193,10 @@ class ChoiceInputElement(InputElement):
 
     def to_str(self, indent=0, include_answer=False):
         s = super().to_str(indent)
-        s = '\n'.join([s] + [add_indent(f'- {opt.to_str()}', indent) for opt in self.options])
+        opts = self.options
+        if self.other_option is not None:
+            opts = opts + [self.other_option]
+        s = '\n'.join([s] + [add_indent(f'- {opt.to_str()}', indent) for opt in opts])
         if include_answer:
             s = self._with_answer(s)
         return s
@@ -256,6 +259,8 @@ class ActChoiceInputElement(ChoiceInputElement):
         for option in self.options:
             if isinstance(option, ActionOption):
                 option._resolve_action(next_page, mapping)
+        if isinstance(self.other_option, ActionOption):
+            self.other_option._resolve_action(next_page, mapping)
 
 
 class Comment(Element):
