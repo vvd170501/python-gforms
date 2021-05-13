@@ -1,4 +1,4 @@
-class ParseError(ValueError):
+class ParseError(Exception):
     def __init__(self, form):
         super().__init__()
         self.form = form
@@ -12,7 +12,7 @@ class ClosedForm(ParseError):
         return f'Form "{self.form.title}" is closed'
 
 
-class ValidationError(ValueError):
+class ValidationError(Exception):
     pass
 
 
@@ -25,7 +25,7 @@ class ElementError(ValidationError):
         return f'Invalid value in "{self.elem.name}"'
 
 
-class InvalidValue(ElementError):
+class InvalidValue(ElementError, ValueError):
     def __init__(self, elem, value):
         super().__init__(elem)
         self.value = value
@@ -34,17 +34,17 @@ class InvalidValue(ElementError):
         return f'Invalid value in "{self.elem.name}" ({self.value})'
 
 
-class MultipleValues(ElementError):
+class MultipleValues(ElementError, ValueError):
     def __str__(self):
         return f'Multiple values are not allowed in "{self.elem.name}")'
 
 
-class DuplicateOther(ElementError):
+class DuplicateOther(ElementError, ValueError):
     def __str__(self):
         return f'Duplicate "Other" values in "{self.elem.name}"'
 
 
-class RequiredElement(ElementError):
+class RequiredElement(ElementError, ValueError):
     def __str__(self):
         return f'Required element "{self.elem.name}" is empty'
 
@@ -65,7 +65,12 @@ class MultipleRowValues(RowError, MultipleValues):
         return f'Multiple values are not allowed in "{self.elem.name}" (row "{self.row}")'
 
 
-class InfiniteLoop(ValidationError):
+class MissingTime(ElementError, TypeError):
+    def __str__(self):
+        return f'Time is required in Date "{self.elem.name}"'
+
+
+class InfiniteLoop(ValidationError, ValueError):
     def __init__(self, form):
         super().__init__(form)
 

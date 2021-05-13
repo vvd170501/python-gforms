@@ -19,7 +19,7 @@ class Option:
         self.other = False
         # len(raw) == 1 for Scale options or if the element has only one option (without actions)
         if len(raw) > self.Index.OTHER:
-            self.other = raw[self.Index.OTHER]
+            self.other = bool(raw[self.Index.OTHER])
 
     def __str__(self):
         return self.value

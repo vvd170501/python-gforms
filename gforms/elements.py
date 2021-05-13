@@ -1,8 +1,10 @@
 import random
+from datetime import date, datetime, time, timedelta
 from enum import Enum, auto
 from typing import List, Literal, Union
 
-from .errors import DuplicateOther, InvalidValue, MultipleRowValues, MultipleValues, \
+from .errors import DuplicateOther, InvalidValue, MissingTime, \
+                    MultipleRowValues, MultipleValues, \
                     RequiredElement, RequiredRow
 from .options import ActionOption, Option
 from .util import Action, add_indent, random_subset, SEP_WIDTH
@@ -20,7 +22,12 @@ ScaleValue = Union[ChoiceValue, int]
 
 EmptyValue = Literal[Value.EMPTY]
 GridValue = List[Union[MultiChoiceValue, EmptyValue]]  # choice(s) for each row
-ElemValue = Union[TextValue, ScaleValue, ChoiceValue, MultiChoiceValue, GridValue]
+DateValue = Union[date, datetime]
+TimeValue = Union[time, timedelta]
+
+ElemValue = Union[TextValue, ScaleValue,
+                  ChoiceValue, MultiChoiceValue, GridValue,
+                  DateValue, TimeValue]
 
 CallbackRetval = Union[ElemValue, Value]
 
@@ -90,17 +97,17 @@ class InputElement(Element):
         value = elem[self.Index.VALUE][0]
         self.entry_id = value[self.Index.ENTRY_ID]
         self.required = value[self.Index.REQUIRED]
-        self.value = Value.EMPTY
+        self._value = Value.EMPTY
 
     def set_value(self, value: Union[ElemValue, EmptyValue]):
         if value is Value.EMPTY and self.required:
             raise RequiredElement(self)
-        self.value = value
+        self._value = value
 
     def payload(self):
-        if self.value is Value.EMPTY:
+        if self._value is Value.EMPTY:
             return {}
-        return {self._submit_id(): self.value}
+        return {self._submit_id(): self._value}
 
     def to_str(self, indent=0, include_answer=False):
         s = f'{self.type.name.title()}: {self.name}'
@@ -113,10 +120,10 @@ class InputElement(Element):
         return s
 
     def _with_answer(self, s):
-        if self.value is Value.EMPTY:
+        if self._value is Value.EMPTY:
             val = 'EMPTY'
         else:
-            val = f'"{self.value}"'
+            val = f'"{self._value}"'
         return f'{s}\n> {val}'
 
     def _submit_id(self):
@@ -151,7 +158,7 @@ class ChoiceInputElement(InputElement):
         if all_choices is Value.EMPTY:
             if self.required:
                 raise RequiredElement(self)
-            self.value = Value.EMPTY
+            self._value = Value.EMPTY
             return
 
         choices = []
@@ -176,15 +183,15 @@ class ChoiceInputElement(InputElement):
 
         if not choices:
             choices = Value.EMPTY
-        self.value = choices
+        self._value = choices
 
     def payload(self):
-        if self.value is Value.EMPTY and self.other_value is Value.EMPTY:
+        if self._value is Value.EMPTY and self.other_value is Value.EMPTY:
             return {}
         main_key = self._submit_id()
         payload = {main_key: []}
-        if self.value is not Value.EMPTY:
-            payload[main_key] += self.value
+        if self._value is not Value.EMPTY:
+            payload[main_key] += self._value
         if self.other_value is not Value.EMPTY:
             payload[main_key].append('__other_option__')
             other_key = main_key + '.other_option_response'
@@ -213,10 +220,10 @@ class ChoiceInputElement(InputElement):
         return [choices]
 
     def _with_answer(self, s):
-        if self.value is Value.EMPTY:
+        if self._value is Value.EMPTY:
             val = 'EMPTY'
         else:
-            val = ', '.join(f'"{choice}"' for choice in self.value)
+            val = ', '.join(f'"{choice}"' for choice in self._value)
         return f'{s}\n> {val}'
 
 
@@ -229,8 +236,8 @@ class ActChoiceInputElement(ChoiceInputElement):
     def set_value(self, choice: Union[ChoiceValue, EmptyValue]):
         super().set_value(choice)
 
-        if self.value is not Value.EMPTY and \
-                (self.other_value is not Value.EMPTY or len(self.value) > 1):
+        if self._value is not Value.EMPTY and \
+                (self.other_value is not Value.EMPTY or len(self._value) > 1):
             raise MultipleValues(self)
 
         self.next_page = None
@@ -248,7 +255,7 @@ class ActChoiceInputElement(ChoiceInputElement):
 
     def to_str(self, indent=0, include_answer=False):
         s = super().to_str(indent, include_answer)
-        if include_answer and self.value is not Value.EMPTY and self.next_page is not None:
+        if include_answer and self._value is not Value.EMPTY and self.next_page is not None:
             if self.next_page is Page.SUBMIT():
                 s = f'{s}\nGo to SUBMIT'
             else:
@@ -325,7 +332,7 @@ class Scale(ChoiceInputElement):
         if isinstance(value, int):
             value = str(value)
         super().set_value(value)
-        if self.value is not Value.EMPTY and len(self.value) > 1:
+        if self._value is not Value.EMPTY and len(self._value) > 1:
             raise MultipleValues(self)
 
     def to_str(self, indent=0, include_answer=False):
@@ -358,7 +365,7 @@ class Grid(ChoiceInputElement):
         if choices is Value.EMPTY or not choices:
             if self.required:
                 raise RequiredElement(self)
-            self.value = Value.EMPTY
+            self._value = Value.EMPTY
             return
 
         choices = choices[:]
@@ -375,15 +382,15 @@ class Grid(ChoiceInputElement):
                 if isinstance(choice, Option):
                     row[j] = choice.value
         if all(row is Value.EMPTY for row in choices):
-            self.value = Value.EMPTY
+            self._value = Value.EMPTY
         else:
-            self.value = choices
+            self._value = choices
 
     def payload(self):
-        if self.value is Value.EMPTY:
+        if self._value is Value.EMPTY:
             return {}
         payload = {}
-        for submit_id, choices in zip(self._submit_ids(), self.value):
+        for submit_id, choices in zip(self._submit_ids(), self._value):
             if choices is not Value.EMPTY:
                 payload[submit_id] = choices
         return payload
@@ -413,10 +420,10 @@ class Grid(ChoiceInputElement):
             if row is Value.EMPTY:
                 return 'EMPTY'
             return ', '.join(f'"{choice}"' for choice in row)
-        if self.value is Value.EMPTY:
+        if self._value is Value.EMPTY:
             val = 'EMPTY'
         else:
-            val = [f'> {row_fmt(row)}' for row in self.value]
+            val = [f'> {row_fmt(row)}' for row in self._value]
         return '\n'.join([s] + val)
 
 
@@ -508,21 +515,96 @@ class Page(Element):
 
 
 class Date(InputElement):
-    # TODO add implementation
-    "entry.{id}_year"  # optional
-    "entry.{id}_month"
-    "entry.{id}_day"
-    "entry.{id}_hour"  # optional
-    "entry.{id}_minute"  # optional
-    pass
+    class Index(InputElement.Index):
+        FLAGS = 7
+        TIME = 0
+        YEAR = 1
+
+    def __init__(self, elem):
+        super().__init__(elem)
+        flags = elem[self.Index.VALUE][0][self.Index.FLAGS]
+        self.has_year = bool(flags[self.Index.YEAR])
+        self.has_time = bool(flags[self.Index.TIME])
+
+    def set_value(self, value: Union[DateValue, EmptyValue]):
+        if self.has_time and not isinstance(value, datetime):
+            raise MissingTime(self)
+        super().set_value(value)
+
+    def payload(self):
+        if self._value is Value.EMPTY:
+            return {}
+        payload = {
+            f'{self._submit_id()}_month': self._value.month,
+            f'{self._submit_id()}_day': self._value.day
+        }
+        if self.has_year:
+            payload[f'{self._submit_id()}_year'] = self._value.year
+        if self.has_time:
+            payload.update({
+                f'{self._submit_id()}_hour': self._value.hour,
+                f'{self._submit_id()}_minute': self._value.minute
+            })
+        return payload
+
+    def _with_answer(self, s):
+        if self._value is Value.EMPTY:
+            val = 'EMPTY'
+        else:
+            fmt = '%m/%d'
+            if self.has_year:
+                fmt = '%Y/' + fmt
+            if self.has_time:
+                fmt += ' %H:%M'
+            val = f'"{self._value.strftime(fmt)}"'
+        return f'{s}\n> {val}'
 
 
 class Time(InputElement):
-    # TODO add implementation
-    "entry.{id}_hour"
-    "entry.{id}_minute"
-    "entry.{id}_second"  # optional
-    pass
+    class Index(InputElement.Index):
+        FLAGS = 6
+        DURATION = 0
+
+    def __init__(self, elem):
+        super().__init__(elem)
+        flags = elem[self.Index.VALUE][0][self.Index.FLAGS]
+        self.is_duration = bool(flags[self.Index.DURATION])
+    # TODO type check
+
+    def payload(self):
+        if self._value is Value.EMPTY:
+            return {}
+        if self.is_duration:
+            seconds = int(self._value.total_seconds())
+            hour = seconds // 3600
+            minute = seconds % 3600 // 60
+            second = seconds % 60
+        else:
+            hour = self._value.hour
+            minute = self._value.minute
+            second = None
+
+        payload = {
+            f'{self._submit_id()}_hour': hour,
+            f'{self._submit_id()}_minute': minute,
+        }
+        if self.is_duration:
+            payload[f'{self._submit_id()}_second'] = second
+        return payload
+
+    def _with_answer(self, s):  # TODO rewrite
+        if self._value is Value.EMPTY:
+            val = 'EMPTY'
+        else:
+            if self.is_duration:
+                seconds = int(self._value.total_seconds())
+                h = seconds // 3600
+                m = seconds % 3600 // 60
+                sec = seconds % 60
+                val = f'{h:02}:{m:02}:{sec:02}'
+            else:
+                val = f'"{self._value.strftime("%H:%M:%S")}"'
+        return f'{s}\n> {val}'
 
 
 def default_callback(elem: InputElement, page_index, elem_index) -> Union[ElemValue, EmptyValue]:

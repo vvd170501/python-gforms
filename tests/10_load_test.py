@@ -270,9 +270,27 @@ class TestGrid(ChoiceElementTest):
         assert grid.multichoice
 
 
-class TestDate(BaseFormTest):
-    pass
+class TestDate(ElementTest):
+    form_type = 'date'
+    expected = [[Date] * 4]
+
+    def test_flags(self, first_page):
+        ymd, ymdt, md, mdt = first_page
+        assert ymd.has_year
+        assert ymdt.has_year
+        assert not md.has_year
+        assert not mdt.has_year
+
+        assert not ymd.has_time
+        assert ymdt.has_time
+        assert not md.has_time
+        assert mdt.has_time
 
 
-class TestTime(BaseFormTest):
-    pass
+@pytest.mark.skip()
+class TestTime(ElementTest):
+    form_type = 'time'
+    expected = [[Time, Time]]
+
+    def test_type(self):
+        pass
