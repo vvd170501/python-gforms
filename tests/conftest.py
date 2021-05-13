@@ -16,9 +16,9 @@ def session():
     return sess
 
 
-
-@pytest.fixture
+@pytest.fixture(scope='package')
 def load_form(request, session):
+    # load_form() executes in test
     @skip_requests_exceptions
     def load_form(url):
         form = Form(url)
