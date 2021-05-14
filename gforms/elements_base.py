@@ -282,7 +282,7 @@ class ChoiceInput1D(ChoiceInput, SingleInput, ABC):
         return self._options[0]
 
     def _hints(self, indent=0):
-        return [add_indent(f'- {opt.to_str()}', indent) for opt in self.options]
+        return [f'- {opt.to_str()}' for opt in self.options]
 
 
 class OtherChoiceInput(ChoiceInput1D, ABC):
@@ -354,9 +354,9 @@ class OtherChoiceInput(ChoiceInput1D, ABC):
                 raise EmptyOther(self)
 
     def _hints(self, indent=0):
-        hints = super()._hints()
+        hints = super()._hints(indent)
         if self.other_option is not None:
-            hints.append(add_indent(f'- {self.other_option.to_str()}', indent))
+            hints.append(f'- {self.other_option.to_str()}')
         return hints
 
     def _entry_answer(self, i) -> str:  # i == 0
@@ -369,6 +369,8 @@ class OtherChoiceInput(ChoiceInput1D, ABC):
 
 
 class Grid(ChoiceInput, ABC):
+    _cell_symbol = '?'
+
     class Index(InputElement.Index):
         ROW_NAME = 3
         MULTICHOICE = 11
@@ -395,8 +397,13 @@ class Grid(ChoiceInput, ABC):
         return self._options[0]
 
     def _hints(self, indent=0):
-        return [add_indent('  ' + ' | '.join([str(opt) for opt in self.options]), indent)] + \
-               [add_indent(f'- {row}', indent) for row in self.rows]
+        # NOTE row/column names may need wrapping
+        tab = '  '
+        max_length = max(len(row) for row in self.rows)
+        cells = ' '.join(f'{self._cell_symbol:^{len(col.value)}}' for col in self.cols)
+        header = [tab + ' ' * (max_length + 1) + '|'.join([str(opt) for opt in self.options])]
+        rows = [tab + f'{row:>{max_length}} ' + cells for row in self.rows]
+        return header + rows
 
     def _set_grid_values(self, values: Union[GridValue, EmptyValue]):
         # TODO check length and types

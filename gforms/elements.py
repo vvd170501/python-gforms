@@ -242,6 +242,8 @@ class Scale(ChoiceInput1D, SingleChoiceInput):
 
 
 class RadioGrid(Grid, SingleChoiceInput):
+    _cell_symbol = '◯'
+
     def set_value(self, value: Union[RadioGridValue, EmptyValue]):
         self._set_grid_values(value)
 
@@ -255,6 +257,8 @@ class RadioGrid(Grid, SingleChoiceInput):
 
 
 class CheckboxGrid(Grid):
+    _cell_symbol = '□'
+
     def set_value(self, value: Union[CheckboxGridValue, EmptyValue]):
         self._set_grid_values(value)
 
