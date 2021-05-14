@@ -5,10 +5,9 @@ from datetime import date
 from enum import Enum, auto
 from typing import Dict, List, Literal, Union, cast
 
-from .errors import DuplicateOther, EmptyOther, InvalidChoice, MultipleValues, \
-                    RequiredElement, invalid_type
+from .errors import DuplicateOther, EmptyOther, InvalidChoice, IncompatibleType, IncompatibleValue,\
+    MultipleValues, RequiredElement, ElementError
 from .options import ActionOption, Option, parse as parse_option
-from .util import add_indent
 
 
 class Value(Enum):
@@ -162,7 +161,7 @@ class InputElement(Element, ABC):
         if self.required:
             for i, value in enumerate(self._values):
                 if not value:
-                    raise RequiredElement(self, i)
+                    raise RequiredElement(self, index=i)
 
     def _hints(self, indent=0):
         """Input hints (options / values). Returned strings should be already indented"""
@@ -255,12 +254,16 @@ class ChoiceInput(InputElement, ABC):
     def _add_choice(self, choices, choice: Option):
         choices.append(choice.value)
 
-    @staticmethod
-    def _canonical_1d_form(choices: Union[MultiChoiceValue, EmptyValue]) -> \
-            Union[List[ChoiceValue], EmptyValue]:
-        if isinstance(choices, list) or choices is Value.EMPTY:
+    def _valid_entry_choices(self, choices) -> Union[List[ChoiceValue], EmptyValue]:
+        if choices is Value.EMPTY:
             return choices
-        return [choices]
+        elif isinstance(choices, list):
+            for choice in choices:
+                if not ChoiceInput._is_choice_value(choice):
+                    raise IncompatibleType(self, choice)
+        elif ChoiceInput._is_choice_value(choices):
+            return [choices]
+        raise IncompatibleType(self, choices)
 
     @staticmethod
     def _is_choice_value(value):
@@ -272,7 +275,7 @@ class SingleChoiceInput(ChoiceInput, ABC):
         super()._validate()
         for i, choices in enumerate(self._values):
             if len(choices) > 1:
-                raise MultipleValues(self, i)
+                raise MultipleValues(self, index=i)
 
 
 class ChoiceInput1D(ChoiceInput, SingleInput, ABC):
@@ -406,10 +409,14 @@ class Grid(ChoiceInput, ABC):
         return header + rows
 
     def _set_grid_values(self, values: Union[GridValue, EmptyValue]):
-        # TODO check length and types
         if values is Value.EMPTY:
             return self._set_choices([Value.EMPTY] * len(self.rows))
-        self._set_choices([self._canonical_1d_form(entry_value) for entry_value in values])
+        if not isinstance(values, list):
+            raise IncompatibleType(self, values)
+        if len(values) != len(self.rows):
+            raise IncompatibleValue(self, values,
+                                    details='Length of choices does not match the number of rows')
+        self._set_choices([self._valid_entry_choices(entry_value) for entry_value in values])
 
 
 class TimeElement(SingleInput, ABC):
@@ -515,7 +522,7 @@ class TextInput(SingleInput):
             return self._set_value(value)
         if isinstance(value, str):
             return self._set_value([value])
-        raise invalid_type(value)
+        raise IncompatibleType(value)
 
 
 class ActionChoiceInput(ChoiceInput1D, SingleChoiceInput):
@@ -525,9 +532,7 @@ class ActionChoiceInput(ChoiceInput1D, SingleChoiceInput):
         self.next_page = None
 
     def set_value(self, value: Union[ChoiceValue, EmptyValue]):
-        if self._is_choice_value(value) or value is Value.EMPTY:
-            return self._set_choices([self._canonical_1d_form(value)])
-        raise invalid_type(value)
+        return self._set_choices([self._valid_entry_choices(value)])
 
     def _set_choices(self, choices: List[Union[List[ChoiceValue], EmptyValue]]):
         self.next_page = None

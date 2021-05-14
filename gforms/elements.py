@@ -12,8 +12,8 @@ from .elements_base import Element, MediaElement, InputElement, \
 from .elements_base import ChoiceValue, EmptyValue, MultiChoiceValue, TextValue, \
                            GridChoiceValue, GridMultiChoiceValue
 
-from .errors import InvalidDuration, MultipleRowValues, MultipleValues, \
-                    RequiredElement, RequiredRow, invalid_type
+from .errors import IncompatibleType, InvalidDuration, MultipleRowValues, MultipleValues, \
+    RequiredElement, RequiredRow, InvalidText
 from .options import ActionOption
 from .util import add_indent, elem_separator, random_subset
 
@@ -182,7 +182,13 @@ class Video(MediaElement):
 
 
 class Short(TextInput):
-    pass  # TODO assert oneline
+    def _validate(self):
+        super()._validate()
+        if not self._value:
+            return
+        value = self._value[0]
+        if '\n' in value:
+            raise InvalidText(self, value.replace('\n', r'\n'), f'Input contains newlines')
 
 
 class Paragraph(TextInput):
@@ -202,10 +208,7 @@ class Dropdown(ActionChoiceInput):
 
 class Checkboxes(OtherChoiceInput):
     def set_value(self, value: Union[CheckboxesValue, EmptyValue]):
-        if self._is_choice_value(value) or value is Value.EMPTY or \
-                isinstance(value, list) and all(self._is_choice_value(val) for val in value):
-            return self._set_choices([self._canonical_1d_form(value)])
-        raise invalid_type(value)
+        return self._set_choices([self._valid_entry_choices(value)])
 
 
 class Scale(ChoiceInput1D, SingleChoiceInput):
@@ -251,9 +254,9 @@ class RadioGrid(Grid, SingleChoiceInput):
         try:
             super()._validate()
         except MultipleValues as e:
-            raise MultipleRowValues(self, e.index)
+            raise MultipleRowValues(self, index=e.index)
         except RequiredElement as e:
-            raise RequiredRow(self, e.index)
+            raise RequiredRow(self, index=e.index)
 
 
 class CheckboxGrid(Grid):
@@ -269,7 +272,7 @@ class Time(TimeElement):
             self._set_time(None, None, None)
         if isinstance(value, time):
             self._set_time(value.hour, value.minute, None)
-        raise invalid_type(value)
+        raise IncompatibleType(self, value)
 
     def _answer(self) -> List[str]:
         if self._is_empty():
@@ -287,7 +290,7 @@ class Duration(TimeElement):
                 raise InvalidDuration(self, value)
             h, m, s = seconds // 3600, seconds // 60 % 60, seconds % 60
             self._set_time(h, m, s)
-        raise invalid_type(value)
+        raise IncompatibleType(self, value)
 
     def _answer(self) -> List[str]:
         if self._is_empty():
@@ -304,7 +307,7 @@ class Date(DateElement):
             return self._set_date(None)
         if isinstance(value, date):
             return self._set_date(value)
-        raise invalid_type(value)
+        raise IncompatibleType(self, value)
 
 
 class DateTime(DateElement):
@@ -318,7 +321,7 @@ class DateTime(DateElement):
         elif isinstance(value, datetime):
             date_, time_ = value.date(), value.time()
         else:
-            raise invalid_type(value)
+            raise IncompatibleType(self, value)
         self._date = date_
         self._time = time_
         self._validate()
