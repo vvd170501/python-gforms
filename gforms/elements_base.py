@@ -214,7 +214,6 @@ class ChoiceInput(InputElement, ABC):
         res.update({
             'options': options,
         })
-        print('\n!!', res['options'])
         return res
 
     def __init__(self, *, options: List[List[Option]], **kwargs):

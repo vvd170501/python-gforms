@@ -60,11 +60,11 @@ class Page(Element):
     @classmethod
     def first(cls):
         return cls(
-            id_=None,
+            id_=Action.FIRST,
             name=None,
             description=None,
             type_=ElementType.PAGE,
-            prev_action=Action.NEXT,
+            prev_action=Action.NEXT,  # ignored
         ).with_index(0)
 
     @classmethod
@@ -137,7 +137,7 @@ class Page(Element):
         if next_page._prev_action == Action.NEXT:
             self._next_page = next_page
         else:
-            self._next_page = mapping[next_page._prev_action]  # FIXME action == -1
+            self._next_page = mapping[next_page._prev_action]
             self._has_default_next_page = False
 
 

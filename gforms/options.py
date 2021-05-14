@@ -63,7 +63,7 @@ class ActionOption(Option):
         if self._action == Action.NEXT:
             self.next_page = next_page
         else:
-            self.next_page = mapping[self._action]  # FIXME action == -1 - first page (?)
+            self.next_page = mapping[self._action]
 
 
 def parse(option):

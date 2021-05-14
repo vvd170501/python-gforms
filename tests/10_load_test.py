@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Type
 
 import pytest
 
@@ -54,16 +54,17 @@ class TestPages(BaseFormTest):
 
     def test_transitions(self, form):
         pages = form.pages
-        assert pages[0].next_page() == pages[1]  # default next page
-        assert pages[1].next_page() == pages[0]  # first page (uses Action instead of id)
-        assert pages[2].next_page() == pages[2]  # page id (loop)
-        assert pages[3].next_page() == pages[4]  # page id (next)
-        assert pages[5].next_page() is None  # submit
+        assert pages[0].next_page() == pages[1]  # default next page (Action.NEXT)
+        assert pages[1].next_page() == pages[0]  # first page (Action.FIRST)
+        assert pages[2].next_page() == pages[1]  # page id (go backwards)
+        assert pages[3].next_page() == pages[3]  # page id (loop)
+        assert pages[4].next_page() == pages[5]  # page id (go forward)
+        assert pages[5].next_page() is None  # Action.SUBMIT
         assert pages[6].next_page() is None  # last page
 
 
 class ElementTest(BaseFormTest):
-    expected: List[List[Element]]
+    expected: List[List[Type[Element]]]
 
     @pytest.fixture(scope='class')
     def pages(self, form):
@@ -84,7 +85,7 @@ class TestElements(ElementTest):
         Short, Paragraph,
         Radio, Checkboxes, Dropdown, Scale,
         RadioGrid, CheckboxGrid,
-        Date, Time, Duration,
+        Date, DateTime, Time, Duration,
         Comment, Image, Video
     ]]
 
@@ -169,9 +170,10 @@ class TestRadio(ActChoiceElementTest):
     def test_options(self, pages):
         for page in pages:
             for elem in page:
-                opt1, opt2 = self.get_options(elem, 2)
+                opt1, opt2, opt3 = self.get_options(elem, 3)
                 assert opt1.value == 'Opt1'
                 assert opt2.value == 'Opt2'
+                assert opt3.value == 'Opt3'
 
     def test_other(self, first_page):
         radio, with_other, with_other_and_actions = first_page
@@ -184,10 +186,11 @@ class TestRadio(ActChoiceElementTest):
         self.assert_no_actions(with_other)
         self.assert_has_actions(with_other_and_actions)
 
-        opt1, opt2 = with_other_and_actions.options
+        opt1, opt2, opt3 = with_other_and_actions.options
         other = with_other_and_actions.other_option
         assert opt1.next_page == form.pages[1]  # default next page
-        assert opt2.next_page == form.pages[0]  # page id (loop)
+        assert opt2.next_page == form.pages[0]  # Action.FIRST
+        assert opt3.next_page == form.pages[1]  # page id (next)
         assert other.next_page == Page.SUBMIT
 
     def test_ignored_actions(self, pages):
@@ -201,20 +204,22 @@ class TestDropdown(ActChoiceElementTest):
     def test_options(self, pages):
         for page in pages:
             for elem in page:
-                opt1, opt2, opt3 = self.get_options(elem, 3)
+                opt1, opt2, opt3, opt4 = self.get_options(elem, 4)
                 assert opt1.value == 'Opt1'
                 assert opt2.value == 'Opt2'
                 assert opt3.value == 'Opt3'
+                assert opt4.value == 'Opt4'
 
     def test_actions(self, first_page, form):
         dropdown, with_actions = first_page
         self.assert_no_actions(dropdown)
         self.assert_has_actions(with_actions)
 
-        opt1, opt2, opt3 = with_actions.options
+        opt1, opt2, opt3, opt4 = with_actions.options
         assert opt1.next_page == form.pages[1]  # default next page
-        assert opt2.next_page == form.pages[0]  # page id (loop)
-        assert opt3.next_page == Page.SUBMIT
+        assert opt2.next_page == form.pages[0]  # Action.FIRST
+        assert opt3.next_page == form.pages[1]  # page id
+        assert opt4.next_page == Page.SUBMIT
 
     def test_ignored_actions(self, pages):
         self.assert_ignored_actions(pages[1][0])
