@@ -518,11 +518,14 @@ class MediaElement(Element):
 
 class TextInput(SingleInput):
     def set_value(self, value: Union[TextValue, EmptyValue]):
+        if isinstance(value, str):
+            if not value:
+                value = Value.EMPTY
+            else:
+                return self._set_value([value])
         if value is Value.EMPTY:
             return self._set_value(value)
-        if isinstance(value, str):
-            return self._set_value([value])
-        raise IncompatibleType(value)
+        raise IncompatibleType(self, value)
 
 
 class ActionChoiceInput(ChoiceInput1D, SingleChoiceInput):
