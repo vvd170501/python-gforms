@@ -13,7 +13,7 @@ from gforms.elements import Date, DateTime, Time, Duration
 from gforms.errors import ClosedForm, ParseError
 from gforms.options import ActionOption
 
-from .util import BaseFormTest
+from .conftest import BaseFormTest
 
 
 class TestFormLoad:

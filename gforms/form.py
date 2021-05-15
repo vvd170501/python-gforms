@@ -47,23 +47,7 @@ class Form:
         self._history = self._get_history(soup)
         self._draft = self._get_draft(soup)
         data = self._raw_form(soup)
-        self.name = data[self.Index.NAME]
-        form = data[self.Index.FORM]
-        self.title = form[self.Index.TITLE]
-        if not self.title:
-            self.title = self.name
-        self.description = form[self.Index.DESCRIPTION]
-        self.pages = [Page.first()]
-
-        if form[self.Index.FIELDS] is None:
-            return
-        for elem in form[self.Index.FIELDS]:
-            el_type = ElementType(elem[Element.Index.TYPE])
-            if el_type == ElementType.PAGE:
-                self.pages.append(Page.parse(elem).with_index(len(self.pages)))
-                continue
-            self.pages[-1].append(parse_element(elem))
-        self._resolve_actions()
+        self._parse(data)
 
     def to_str(self, indent=0, include_answer=False):
         if self.description:
@@ -136,6 +120,31 @@ class Form:
                 raise RuntimeError('Incorrect next page', self, res, page)
         return res
 
+    def _parse(self, data):
+        self.name = data[self.Index.NAME]
+        form = data[self.Index.FORM]
+        self.title = form[self.Index.TITLE]
+        if not self.title:
+            self.title = self.name
+        self.description = form[self.Index.DESCRIPTION]
+        self.pages = [Page.first()]
+
+        if form[self.Index.FIELDS] is None:
+            return
+        for elem in form[self.Index.FIELDS]:
+            el_type = ElementType(elem[Element.Index.TYPE])
+            if el_type == ElementType.PAGE:
+                self.pages.append(Page.parse(elem).with_index(len(self.pages)))
+                continue
+            self.pages[-1].append(parse_element(elem))
+        self._resolve_actions()
+
+    def _resolve_actions(self):
+        mapping = {page.id: page for page in self.pages}
+        mapping[Action.SUBMIT] = Page.SUBMIT
+        for (page, next_page) in zip(self.pages, self.pages[1:] + [None]):
+            page.resolve_actions(next_page, mapping)
+
     def _submit_page(self, http, page, history, draft, continue_):
         payload = {}
         for elem in page.elements:
@@ -151,12 +160,6 @@ class Form:
 
         url = re.sub(r'(.+)viewform.*', r'\1formResponse', self.url)
         return http.post(url, data=payload)
-
-    def _resolve_actions(self):
-        mapping = {page.id: page for page in self.pages}
-        mapping[Action.SUBMIT] = Page.SUBMIT
-        for (page, next_page) in zip(self.pages, self.pages[1:] + [None]):
-            page.resolve_actions(next_page, mapping)
 
     @staticmethod
     def _get_input(soup, name):
