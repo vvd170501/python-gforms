@@ -190,6 +190,9 @@ class Short(TextInput):
         if '\n' in value:
             raise InvalidText(self, value.replace('\n', r'\n'), f'Input contains newlines')
 
+    # For elements without additional validation, max value length is 32712 (tested on 15.05.21)
+    # This limit may be dynamic
+
 
 class Paragraph(TextInput):
     pass

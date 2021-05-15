@@ -32,11 +32,11 @@ class ClosedForm(ParseError):
         return f'Form "{self.form.title}" is closed'
 
 
-class ValidationError(FormError, ValueError, ABC):
+class ValidationError(FormError, ValueError):
     pass
 
 
-class ElementError(FormError, ABC):
+class ElementError(FormError):
     def __init__(self, elem, *args, index=0, **kwargs):
         super().__init__(*args, **kwargs)
         self.elem = elem
@@ -63,7 +63,7 @@ class IncompatibleValue(ElementError, ValueError):  # not the best name
                f'(element: "{self.elem.name}", value: {repr(self.value)})'
 
 
-class InvalidValue(ElementError, ValidationError, ABC):
+class InvalidValue(ElementError, ValidationError):
     def __init__(self, elem, value, *args, **kwargs):
         super().__init__(elem, *args, **kwargs)
         self.value = value
@@ -104,7 +104,7 @@ class DuplicateOther(ElementError, ValueError):
         return f'Duplicate "Other" values in "{self.elem.name}" ("{self.val1}" and "{self.val2}")'
 
 
-class RowError(ElementError, ABC):
+class RowError(ElementError):
     @property
     def row(self):
         return self.elem.rows[self.index]

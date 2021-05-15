@@ -177,7 +177,7 @@ class InputElement(Element, ABC):
         return ', '.join(f'"{value}"' for value in entry_val)
 
 
-class SingleInput(InputElement, ABC):
+class SingleInput(InputElement):
     """InputElement with 1 entry"""
 
     def _set_value(self, value: Union[List[str], EmptyValue]):
@@ -199,7 +199,7 @@ class SingleInput(InputElement, ABC):
         return InputElement._get_entries(elem)[0]
 
 
-class ChoiceInput(InputElement, ABC):
+class ChoiceInput(InputElement):
     # basically a CheckboxGrid
 
     @classmethod
@@ -270,7 +270,7 @@ class ChoiceInput(InputElement, ABC):
         return isinstance(value, str) or isinstance(value, Option)
 
 
-class SingleChoiceInput(ChoiceInput, ABC):
+class SingleChoiceInput(ChoiceInput):
     def _validate(self):
         super()._validate()
         for i, choices in enumerate(self._values):
@@ -278,7 +278,7 @@ class SingleChoiceInput(ChoiceInput, ABC):
                 raise MultipleValues(self, index=i)
 
 
-class ChoiceInput1D(ChoiceInput, SingleInput, ABC):
+class ChoiceInput1D(ChoiceInput, SingleInput):
     # checkboxes without "other"
     @property
     def options(self):
@@ -288,7 +288,7 @@ class ChoiceInput1D(ChoiceInput, SingleInput, ABC):
         return [f'- {opt.to_str()}' for opt in self.options]
 
 
-class OtherChoiceInput(ChoiceInput1D, ABC):
+class OtherChoiceInput(ChoiceInput1D):
     """ChoiceInput which supports "Other" option"""
     @classmethod
     def _parse(cls, elem):
@@ -371,7 +371,7 @@ class OtherChoiceInput(ChoiceInput1D, ABC):
         return val
 
 
-class Grid(ChoiceInput, ABC):
+class Grid(ChoiceInput):
     _cell_symbol = '?'
 
     class Index(InputElement.Index):
@@ -419,7 +419,7 @@ class Grid(ChoiceInput, ABC):
         self._set_choices([self._valid_entry_choices(entry_value) for entry_value in values])
 
 
-class TimeElement(SingleInput, ABC):
+class TimeElement(SingleInput):
     class Index(SingleInput.Index):
         FLAGS = 6
         DURATION = 0
@@ -459,7 +459,7 @@ class TimeElement(SingleInput, ABC):
         return all(val is None for val in [self._hour, self._minute, self._second])
 
 
-class DateElement(SingleInput, ABC):
+class DateElement(SingleInput):
     class Index(SingleInput.Index):
         FLAGS = 7
         TIME = 0

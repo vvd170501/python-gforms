@@ -16,11 +16,8 @@ from gforms.options import ActionOption
 from .util import BaseFormTest
 
 
-BASIC_FORM_URL = ''
-
-
 class TestFormLoad:
-    def test(self, load_form):
+    def test_invalid_url(self, load_form):
         with pytest.raises(ParseError):
             load_form('https://docs.google.com/forms/d/e/00000000000000000000000000000000000000000000000000000000/viewform')
 
