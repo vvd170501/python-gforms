@@ -13,7 +13,7 @@ from gforms.elements import CheckboxGrid, RadioGrid
 from gforms.elements import Date, DateTime, Time, Duration
 
 from gforms.errors import ElementTypeError, ElementValueError, RequiredElement, InvalidChoice, \
-    EmptyOther
+    EmptyOther, InvalidDuration
 from gforms.errors import InvalidText
 from gforms.options import Option, ActionOption
 
@@ -21,6 +21,8 @@ from gforms.options import Option, ActionOption
 class ElementTest(ABC):
     elem_type: Type[InputElement]
     entry_ids: List[int]
+    allow_strings = False
+    allow_lists = False
 
     @pytest.fixture
     def kwargs(self):
@@ -39,22 +41,28 @@ class ElementTest(ABC):
             key += '_' + part
         return key
 
+    @staticmethod
+    def get_payload(element, value):
+        # NOTE call element.set_value() / validate() / payload() only when testing for exceptions
+        # In all other cases, use this method
+        element.set_value(value)
+        element.validate()
+        return element.payload()
+
     @classmethod
-    def get_value(cls, payload, index=0, part=None):
+    def get_value(cls, payload, *, index=0, part=None):
         return payload[cls._entry_key(index, part)]
 
     @classmethod
-    def extract_value(cls, payload, index=0, part=None):
+    def extract_value(cls, payload, *, index=0, part=None):
         return payload.pop(cls._entry_key(index, part))
 
-    @staticmethod
-    def check_empty_value(required, optional, value):
+    @classmethod
+    def check_empty_value(cls, required, optional, value):
         required.set_value(Value.EMPTY)
         with pytest.raises(RequiredElement):
             required.validate()
-        optional.set_value(value)
-        optional.validate()
-        assert optional.payload() == {}
+        assert cls.get_payload(optional, value) == {}
 
     _type_mapping = {
         Short: ElementType.SHORT,
@@ -93,10 +101,9 @@ class ElementTest(ABC):
         kwargs['required'] = request.param
         return self.elem_type(**kwargs)
 
-    @pytest.mark.parametrize("value", [{}, b'', None, False, True])
-    def test_invalid_types(self, element, value):
+    def test_invalid_types(self, element, invalid_type):
         with pytest.raises(ElementTypeError):
-            element.set_value(value)
+            element.set_value(invalid_type)
 
     def test_empty(self, required, optional):
         self.check_empty_value(required, optional, Value.EMPTY)
@@ -104,25 +111,23 @@ class ElementTest(ABC):
 
 class SingleEntryTest(ElementTest):
     entry_ids = [123]
+
     @classmethod
     def check_value(cls, element, value, expected_value):
-        element.set_value(value)
-        payload = element.payload()
+        payload = cls.get_payload(element, value)
         assert cls.extract_value(payload) == expected_value
         assert payload == {}
 
 
 class AcceptsStr(ElementTest):
+    allow_strings = True
+
     def test_empty_string(self, required, optional):
         self.check_empty_value(required, optional, '')
 
 
 class TextTest(SingleEntryTest, AcceptsStr):
     elem_type: Type[TextInput]
-
-    def test_not_a_str(self, element):
-        with pytest.raises(ElementTypeError):
-            element.set_value(['qwe'])
 
     def test_oneline(self, element):
         value = 'Qwe'
@@ -133,8 +138,9 @@ class TestShort(TextTest):
     elem_type = Short
 
     def test_multiline(self, element):
+        element.set_value('Qwe\n')
         with pytest.raises(InvalidText):
-            element.set_value('Qwe\n')
+            element.validate()
 
 
 class TestParagraph(TextTest):
@@ -143,6 +149,9 @@ class TestParagraph(TextTest):
     def test_multiline(self, element):
         value = 'Qwe\r\nRty\r\n'
         self.check_value(element, value, [value])
+
+
+###################################### TODO #######################################
 
 
 class ChoiceTest1D(SingleEntryTest, AcceptsStr):
@@ -170,9 +179,7 @@ class DisallowOther(ChoiceTest1D):
 
 
 class SingleChoice1D(ChoiceTest1D):
-    def test_disallow_list(self, element):
-        with pytest.raises(ElementTypeError):
-            element.set_value([])
+    pass  # TODO ?
 
 
 class ChoiceWithOther(ChoiceTest1D):
@@ -193,6 +200,7 @@ class ChoiceWithOther(ChoiceTest1D):
         with pytest.raises(EmptyOther):
             required.validate()
 
+
 class ActionChoiceTest(SingleChoice1D):
     elem_type: Type[ActionChoiceInput]
 
@@ -209,6 +217,7 @@ class ActionChoiceTest(SingleChoice1D):
 
 class TestCheckboxes(ChoiceWithOther):
     elem_type = Checkboxes
+    allow_lists = True
 
     @pytest.fixture
     def options(self) -> List[Option]:
@@ -255,6 +264,8 @@ class TestScale(SingleChoice1D, DisallowOther):
 
 
 class GridTest(ElementTest):
+    allow_lists = True
+
     row_count = 5
     col_count = 3
 
@@ -281,6 +292,9 @@ class TestCheckboxGrid(GridTest):
     # TODO
 
 
+###################################### !TODO #######################################
+
+
 class DateTest(SingleEntryTest):
     elem_type: Type[DateElement]
 
@@ -289,25 +303,67 @@ class DateTest(SingleEntryTest):
         kwargs['has_year'] = False
 
     @pytest.fixture
-    def with_year(self, kwargs):
-        kwargs['has_year'] = True
+    def with_year(self, kwargs, request):
+        if request.param:
+            kwargs['has_year'] = True
+        return request.param
 
 
 class TestDateTime(DateTest):
     elem_type = DateTime
-    # TODO
+
+    @pytest.mark.parametrize('with_year', [True, False], indirect=True)
+    def test_datetime(self, with_year, element):
+        value = datetime(2000, 12, 31, 12, 34, 56)
+        payload = self.get_payload(element, value)
+        if with_year:
+            assert self.extract_value(payload, part='year') == value.year
+        assert self.extract_value(payload, part='month') == value.month
+        assert self.extract_value(payload, part='day') == value.day
+        assert self.extract_value(payload, part='hour') == value.hour
+        assert self.extract_value(payload, part='minute') == value.minute
+        assert payload == {}
 
 
 class TestDate(DateTest):
     elem_type = Date
-    # TODO
+
+    @pytest.mark.parametrize('with_year', [True, False], indirect=True)
+    def test_date(self, with_year, element):
+        value = date(2000, 12, 31)
+        payload = self.get_payload(element, value)
+        if with_year:
+            assert self.extract_value(payload, part='year') == value.year
+        assert self.extract_value(payload, part='month') == value.month
+        assert self.extract_value(payload, part='day') == value.day
+        assert payload == {}
 
 
 class TestTime(SingleEntryTest):
     elem_type = Time
-    # TODO
+
+    def test_time(self, element):
+        value = time(hour=12, minute=34, second=56)
+        payload = self.get_payload(element, value)
+        assert self.extract_value(payload, part='hour') == value.hour
+        assert self.extract_value(payload, part='minute') == value.minute
+        assert payload == {}
 
 
 class TestDuration(SingleEntryTest):
     elem_type = Duration
-    # TODO
+
+    def test_duration(self, element):
+        h, m, s = 12, 34, 56
+        payload = self.get_payload(element,
+                                   timedelta(hours=h, minutes=m, seconds=s))
+        assert self.extract_value(payload, part='hour') == h
+        assert self.extract_value(payload, part='minute') == m
+        assert self.extract_value(payload, part='second') == s
+        assert payload == {}
+
+    @pytest.mark.parametrize('duration', [timedelta(seconds=73*3600), timedelta(seconds=-1)])
+    def test_invalid_duration(self, element, duration):
+        element.set_value(duration)
+        with pytest.raises(InvalidDuration):
+            element.validate()

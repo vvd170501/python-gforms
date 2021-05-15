@@ -267,9 +267,9 @@ class CheckboxGrid(Grid):
 class Time(TimeElement):
     def set_value(self, value: Union[TimeValue, EmptyValue]):
         if value is Value.EMPTY:
-            self._set_time(None, None, None)
+            return self._set_time(None, None, None)
         if isinstance(value, time):
-            self._set_time(value.hour, value.minute, None)
+            return self._set_time(value.hour, value.minute, None)
         raise ElementTypeError(self, value)
 
     def _answer(self) -> List[str]:
@@ -279,16 +279,29 @@ class Time(TimeElement):
 
 
 class Duration(TimeElement):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._timedelta = None
+
     def set_value(self, value: Union[DurationValue, EmptyValue]):
         if value is Value.EMPTY:
             self._set_time(None, None, None)
-        if isinstance(value, timedelta):
+            self._timedelta = None
+        elif isinstance(value, timedelta):
             seconds = int(value.total_seconds())
-            if seconds >= 73 * 3600 or seconds < 0:
-                raise InvalidDuration(self, value)
             h, m, s = seconds // 3600, seconds // 60 % 60, seconds % 60
             self._set_time(h, m, s)
-        raise ElementTypeError(self, value)
+            self._timedelta = value
+        else:
+            raise ElementTypeError(self, value)
+
+    def validate(self):
+        super().validate()
+        if self._timedelta is None:
+            return
+        seconds = self._timedelta.total_seconds()
+        if seconds >= 73 * 3600 or seconds < 0:
+            raise InvalidDuration(self, self._timedelta)
 
     def _answer(self) -> List[str]:
         if self._is_empty():
@@ -303,7 +316,7 @@ class Date(DateElement):
     def set_value(self, value: Union[DateValue, EmptyValue]):
         if value is Value.EMPTY:
             self._date = None
-        if isinstance(value, date):
+        elif isinstance(value, date):
             self._date = value
         else:
             raise ElementTypeError(self, value)

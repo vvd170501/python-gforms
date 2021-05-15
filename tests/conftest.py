@@ -28,6 +28,16 @@ def load_dump(form_type):
     return form
 
 
+def pytest_generate_tests(metafunc):
+    if 'invalid_type' in metafunc.fixturenames:
+        values = [{}, None, False, True]
+        if not metafunc.cls.allow_strings:
+            values.append('')
+        if not metafunc.cls.allow_lists:
+            values.append([])
+        metafunc.parametrize('invalid_type', values, ids=lambda val: str(val) or '""')
+
+
 @pytest.fixture(scope='session')
 def url():
     if urls_available:
