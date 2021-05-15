@@ -3,10 +3,10 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from datetime import date
 from enum import Enum, auto
-from typing import Dict, List, Literal, Union, cast
+from typing import Dict, List, Literal, Union, cast, Any
 
-from .errors import DuplicateOther, EmptyOther, InvalidChoice, IncompatibleType, IncompatibleValue,\
-    MultipleValues, RequiredElement, ElementError
+from .errors import DuplicateOther, EmptyOther, InvalidChoice, ElementTypeError, ElementValueError,\
+                    RequiredElement, ElementError
 from .options import ActionOption, Option, parse as parse_option
 
 
@@ -120,6 +120,10 @@ class InputElement(Element, ABC):
     def set_value(self, value):
         raise NotImplementedError()
 
+    def validate(self):
+        for i in range(len(self._values)):
+            self._validate_entry(i)
+
     def to_str(self, indent=0, include_answer=False):
         s = f'{self._type_str()}: {self.name}'
         if self.required:
@@ -155,13 +159,6 @@ class InputElement(Element, ABC):
                 values[i] = []
 
         self._values = values  # type: ignore
-        self._validate()
-
-    def _validate(self):
-        if self.required:
-            for i, value in enumerate(self._values):
-                if not value:
-                    raise RequiredElement(self, index=i)
 
     def _hints(self, indent=0):
         """Input hints (options / values). Returned strings should be already indented"""
@@ -175,6 +172,10 @@ class InputElement(Element, ABC):
         if not entry_val:
             return 'EMPTY'
         return ', '.join(f'"{value}"' for value in entry_val)
+
+    def _validate_entry(self, index):
+        if self.required and not self._values[index]:
+            raise RequiredElement(self, index=index)
 
 
 class SingleInput(InputElement):
@@ -199,7 +200,7 @@ class SingleInput(InputElement):
         return InputElement._get_entries(elem)[0]
 
 
-class ChoiceInput(InputElement):
+class ChoiceInput(InputElement, ABC):
     # basically a CheckboxGrid
 
     @classmethod
@@ -254,16 +255,17 @@ class ChoiceInput(InputElement):
     def _add_choice(self, choices, choice: Option):
         choices.append(choice.value)
 
-    def _valid_entry_choices(self, choices) -> Union[List[ChoiceValue], EmptyValue]:
+    def _valid_entry_choices(self, choices: Union[MultiChoiceValue, EmptyValue, Any])\
+            -> Union[List[ChoiceValue], EmptyValue]:
         if choices is Value.EMPTY:
             return choices
         elif isinstance(choices, list):
             for choice in choices:
                 if not ChoiceInput._is_choice_value(choice):
-                    raise IncompatibleType(self, choice)
+                    raise ElementTypeError(self, choice)
         elif ChoiceInput._is_choice_value(choices):
             return [choices]
-        raise IncompatibleType(self, choices)
+        raise ElementTypeError(self, choices)
 
     @staticmethod
     def _is_choice_value(value):
@@ -271,11 +273,7 @@ class ChoiceInput(InputElement):
 
 
 class SingleChoiceInput(ChoiceInput):
-    def _validate(self):
-        super()._validate()
-        for i, choices in enumerate(self._values):
-            if len(choices) > 1:
-                raise MultipleValues(self, index=i)
+    pass  # TODO
 
 
 class ChoiceInput1D(ChoiceInput, SingleInput):
@@ -318,7 +316,7 @@ class OtherChoiceInput(ChoiceInput1D):
         payload = super().payload()
         main_key = self._submit_id(self._entry_id)
         other_key = main_key + '.other_option_response'
-        payload[main_key].append('__other_option__')
+        payload.setdefault(main_key, []).append('__other_option__')
         payload[other_key] = [self._other_value]
         return payload
 
@@ -349,8 +347,8 @@ class OtherChoiceInput(ChoiceInput1D):
         else:
             super()._add_choice(choices, choice)
 
-    def _validate(self):
-        if self.required and self._value is None:
+    def _validate_entry(self, index):
+        if self.required and not self._value:
             if self._other_value is None:
                 raise RequiredElement(self)
             if not self._other_value:
@@ -412,9 +410,9 @@ class Grid(ChoiceInput):
         if values is Value.EMPTY:
             return self._set_choices([Value.EMPTY] * len(self.rows))
         if not isinstance(values, list):
-            raise IncompatibleType(self, values)
+            raise ElementTypeError(self, values)
         if len(values) != len(self.rows):
-            raise IncompatibleValue(self, values,
+            raise ElementValueError(self, values,
                                     details='Length of choices does not match the number of rows')
         self._set_choices([self._valid_entry_choices(entry_value) for entry_value in values])
 
@@ -435,6 +433,10 @@ class TimeElement(SingleInput):
         self._minute = None
         self._second = None
 
+    def validate(self):
+        if self.required and self._is_empty():
+            raise RequiredElement(self)
+
     def payload(self):
         payload = {}
         if self._hour is not None:
@@ -449,11 +451,6 @@ class TimeElement(SingleInput):
         self._hour = hour
         self._minute = minute
         self._second = second
-        self._validate()
-
-    def _validate(self):
-        if self.required and self._is_empty():
-            raise RequiredElement(self)
 
     def _is_empty(self):
         return all(val is None for val in [self._hour, self._minute, self._second])
@@ -484,6 +481,10 @@ class DateElement(SingleInput):
         self.has_year = has_year
         self._date = None
 
+    def validate(self):
+        if self.required and self._date is None:
+            raise RequiredElement(self)
+
     def payload(self):
         if self._date is None:
             return {}
@@ -494,14 +495,6 @@ class DateElement(SingleInput):
         if self.has_year:
             payload[self._part_id("year")] = self._date.year
         return payload
-
-    def _set_date(self, value: Union[date, None]):
-        self._date = value
-        self._validate()
-
-    def _validate(self):
-        if self.required and self._date is None:
-            raise RequiredElement(self)
 
     def _answer(self) -> List[str]:
         if self._date is None:
@@ -525,7 +518,7 @@ class TextInput(SingleInput):
                 return self._set_value([value])
         if value is Value.EMPTY:
             return self._set_value(value)
-        raise IncompatibleType(self, value)
+        raise ElementTypeError(self, value)
 
 
 class ActionChoiceInput(ChoiceInput1D, SingleChoiceInput):

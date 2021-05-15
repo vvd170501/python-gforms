@@ -12,7 +12,7 @@ from .elements_base import Element, MediaElement, InputElement, \
 from .elements_base import ChoiceValue, EmptyValue, MultiChoiceValue, TextValue, \
                            GridChoiceValue, GridMultiChoiceValue
 
-from .errors import IncompatibleType, InvalidDuration, MultipleRowValues, MultipleValues, \
+from .errors import ElementTypeError, InvalidDuration, \
     RequiredElement, RequiredRow, InvalidText
 from .options import ActionOption
 from .util import add_indent, elem_separator, random_subset
@@ -182,16 +182,13 @@ class Video(MediaElement):
 
 
 class Short(TextInput):
-    def _validate(self):
-        super()._validate()
+    def _validate_entry(self, index):
+        super()._validate_entry(index)
         if not self._value:
             return
         value = self._value[0]
         if '\n' in value:
             raise InvalidText(self, value.replace('\n', r'\n'), f'Input contains newlines')
-
-    # For elements without additional validation, max value length is 32712 (tested on 15.05.21)
-    # This limit may be dynamic
 
 
 class Paragraph(TextInput):
@@ -236,7 +233,7 @@ class Scale(ChoiceInput1D, SingleChoiceInput):
     def set_value(self, value: Union[ScaleValue, EmptyValue]):
         if isinstance(value, int):
             value = str(value)
-        super().set_value(value)
+        return self._set_choices([self._valid_entry_choices(value)])
 
     def _hints(self, indent=0):
         hint = f'{self.options[0]} - {self.options[-1]}'
@@ -253,11 +250,9 @@ class RadioGrid(Grid, SingleChoiceInput):
     def set_value(self, value: Union[RadioGridValue, EmptyValue]):
         self._set_grid_values(value)
 
-    def _validate(self):
+    def _validate_entry(self, index):
         try:
-            super()._validate()
-        except MultipleValues as e:
-            raise MultipleRowValues(self, index=e.index)
+            super()._validate_entry(index)
         except RequiredElement as e:
             raise RequiredRow(self, index=e.index)
 
@@ -275,7 +270,7 @@ class Time(TimeElement):
             self._set_time(None, None, None)
         if isinstance(value, time):
             self._set_time(value.hour, value.minute, None)
-        raise IncompatibleType(self, value)
+        raise ElementTypeError(self, value)
 
     def _answer(self) -> List[str]:
         if self._is_empty():
@@ -293,7 +288,7 @@ class Duration(TimeElement):
                 raise InvalidDuration(self, value)
             h, m, s = seconds // 3600, seconds // 60 % 60, seconds % 60
             self._set_time(h, m, s)
-        raise IncompatibleType(self, value)
+        raise ElementTypeError(self, value)
 
     def _answer(self) -> List[str]:
         if self._is_empty():
@@ -307,10 +302,11 @@ class Duration(TimeElement):
 class Date(DateElement):
     def set_value(self, value: Union[DateValue, EmptyValue]):
         if value is Value.EMPTY:
-            return self._set_date(None)
+            self._date = None
         if isinstance(value, date):
-            return self._set_date(value)
-        raise IncompatibleType(self, value)
+            self._date = value
+        else:
+            raise ElementTypeError(self, value)
 
 
 class DateTime(DateElement):
@@ -324,10 +320,9 @@ class DateTime(DateElement):
         elif isinstance(value, datetime):
             date_, time_ = value.date(), value.time()
         else:
-            raise IncompatibleType(self, value)
+            raise ElementTypeError(self, value)
         self._date = date_
         self._time = time_
-        self._validate()
 
     def payload(self):
         if self._date is None:
@@ -339,8 +334,9 @@ class DateTime(DateElement):
         })
         return payload
 
-    def _validate(self):
-        if self.required and self._date is None or self._time is None:
+    def validate(self):
+        super().validate()
+        if self.required and self._time is None:
             raise RequiredElement(self)
 
     def _answer(self) -> List[str]:

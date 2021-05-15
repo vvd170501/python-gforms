@@ -32,10 +32,6 @@ class ClosedForm(ParseError):
         return f'Form "{self.form.title}" is closed'
 
 
-class ValidationError(FormError, ValueError):
-    pass
-
-
 class ElementError(FormError):
     def __init__(self, elem, *args, index=0, **kwargs):
         super().__init__(*args, **kwargs)
@@ -43,7 +39,33 @@ class ElementError(FormError):
         self.index = index
 
 
-class IncompatibleType(ElementError, TypeError):
+class InfiniteLoop(FormError, ValueError):
+    def __init__(self, form):
+        super().__init__(form)
+
+    def _message(self):
+        return 'Chosen input values lead to an infinite loop'
+
+
+class RowError(ElementError):
+    @property
+    def row(self):
+        return self.elem.rows[self.index]
+
+
+class ValidationError(FormError, ValueError):
+    pass
+
+
+class InvalidValue(ElementError, ValidationError):
+    def __init__(self, elem, value, *args, **kwargs):
+        super().__init__(elem, *args, **kwargs)
+        self.value = value
+
+
+# The following errors may be raised from InputElement.set_value
+
+class ElementTypeError(ElementError, TypeError):
     def __init__(self, elem, value, *args, **kwargs):
         super().__init__(elem, *args, **kwargs)
         self.value = value
@@ -53,7 +75,7 @@ class IncompatibleType(ElementError, TypeError):
                f'(element: "{self.elem.name}", argument: {repr(self.value)})'
 
 
-class IncompatibleValue(ElementError, ValueError):  # not the best name
+class ElementValueError(ElementError, ValueError):  # not the best name
     def __init__(self, elem, value, *args, **kwargs):
         super().__init__(elem, *args, **kwargs)
         self.value = value
@@ -63,26 +85,27 @@ class IncompatibleValue(ElementError, ValueError):  # not the best name
                f'(element: "{self.elem.name}", value: {repr(self.value)})'
 
 
-class InvalidValue(ElementError, ValidationError):
-    def __init__(self, elem, value, *args, **kwargs):
-        super().__init__(elem, *args, **kwargs)
-        self.value = value
-
-
-class InvalidText(InvalidValue):
-    def _message(self):
-        return f'Invalid text input in "{self.elem.name}" ({self.value})'
-
-
-class InvalidChoice(InvalidValue):
+class InvalidChoice(ElementValueError):
     def _message(self):
         return f'Invalid choice in "{self.elem.name}" ({self.value})'
 
 
-class MultipleValues(ElementError, ValueError):
-    def _message(self):
-        return f'Multiple values are not allowed in "{self.elem.name}"'
+class DuplicateOther(ElementValueError):
+    def __init__(self, elem, val1, val2, *args, **kwargs):
+        super().__init__(elem, *args, **kwargs)
+        self.val1 = val1
+        self.val2 = val2
 
+    def _message(self):
+        return f'Duplicate "Other" values in "{self.elem.name}" ("{self.val1}" and "{self.val2}")'
+
+
+class InvalidRowChoice(InvalidChoice, RowError):
+    def _message(self):
+        return f'Invalid choice in "{self.elem.name}" ({self.value})'
+
+
+# The following errors may be raised from InputElement.validate
 
 class RequiredElement(ElementError, ValidationError):
     def _message(self):
@@ -94,41 +117,17 @@ class EmptyOther(RequiredElement):
         return f'Empty "Other" value in required element "{self.elem.name}"'
 
 
-class DuplicateOther(ElementError, ValueError):
-    def __init__(self, elem, val1, val2, *args, **kwargs):
-        super().__init__(elem, *args, **kwargs)
-        self.val1 = val1
-        self.val2 = val2
-
-    def _message(self):
-        return f'Duplicate "Other" values in "{self.elem.name}" ("{self.val1}" and "{self.val2}")'
-
-
-class RowError(ElementError):
-    @property
-    def row(self):
-        return self.elem.rows[self.index]
-
-
 class RequiredRow(RequiredElement, RowError):
     def _message(self):
         return f'A row ("{self.row}") in required element "{self.elem.name}" is empty'
 
 
-class MultipleRowValues(MultipleValues, RowError):
+class InvalidText(InvalidValue):
     def _message(self):
-        return f'Multiple values are not allowed in "{self.elem.name}" (row "{self.row}")'
+        return f'Invalid text input in "{self.elem.name}" ({self.value})'
 
 
 class InvalidDuration(InvalidValue):
     def _message(self):
         return f'Duration value ({self.value.total_seconds()} seconds) is out of range: ' \
                f'value should be positive and less than 73 hours '
-
-
-class InfiniteLoop(FormError, ValueError):
-    def __init__(self, form):
-        super().__init__(form)
-
-    def _message(self):
-        return 'Chosen input values lead to an infinite loop'

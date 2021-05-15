@@ -93,6 +93,8 @@ class Form:
             page = page.next_page()
             if page in pages_to_submit:
                 raise InfiniteLoop(self)
+                for elem in page.elements:
+                    elem.validate()
             pages_to_submit.add(page)
 
     def submit(self, http):
