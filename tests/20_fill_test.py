@@ -15,6 +15,34 @@ from gforms.errors import InvalidText
 
 
 class ElementTest(ABC):
+    elem_type: Type[InputElement]
+    entry_ids: List[int]
+
+    @classmethod
+    def kwargs(cls):
+        return {
+            'id_': 123456,
+            'name': 'Test element',
+            'description': 'Element description',
+            'type_': cls._type_mapping[cls.elem_type],
+            'entry_ids': cls.entry_ids,
+        }
+
+    @classmethod
+    def _entry_key(cls, index=0, part=None):
+        key = f'entry.{cls.entry_ids[index]}'
+        if part is not None:
+            key += '_' + part
+        return key
+
+    @classmethod
+    def get_value(cls, payload, index=0, part=None):
+        return payload[cls._entry_key(index, part)]
+
+    @classmethod
+    def extract_value(cls, payload, index=0, part=None):
+        return payload.pop(cls._entry_key(index, part))
+
     _type_mapping = {
         Short: ElementType.SHORT,
         Paragraph: ElementType.PARAGRAPH,
@@ -29,7 +57,7 @@ class ElementTest(ABC):
 
     @property
     @abstractmethod
-    def elem_type(self) -> Type[InputElement]:
+    def elem_type(self):
         raise NotImplementedError()
 
     @property
@@ -38,27 +66,20 @@ class ElementTest(ABC):
         raise NotImplementedError()
 
     @pytest.fixture
-    def kwargs(self):
-        return {
-            'id_': 123456,
-            'name': 'Test element',
-            'description': 'Element description',
-            'type_': self._type_mapping[self.elem_type],
-            'entry_ids': self.entry_ids,
-        }
-
-    @pytest.fixture
-    def optional(self, kwargs):
+    def optional(self):
+        kwargs = self.kwargs()
         kwargs['required'] = False
         return self.elem_type(**kwargs)
 
     @pytest.fixture
-    def required(self, kwargs):
+    def required(self):
+        kwargs = self.kwargs()
         kwargs['required'] = True
         return self.elem_type(**kwargs)
 
     @pytest.fixture(params=[False, True], ids=['optional', 'required'])
-    def element(self, kwargs, request):
+    def element(self, request):
+        kwargs = self.kwargs()
         kwargs['required'] = request.param
         return self.elem_type(**kwargs)
 
@@ -76,10 +97,12 @@ class ElementTest(ABC):
 
 class SingleEntryTest(ElementTest):
     entry_ids = [123]
-
-    @staticmethod
-    def check_result(element, value):
-        assert element.payload() == {f'entry.{SingleEntryTest.entry_ids[0]}': value}
+    @classmethod
+    def check_value(cls, element, value, expected_value):
+        element.set_value(value)
+        payload = element.payload()
+        assert cls.extract_value(payload) == expected_value
+        assert payload == {}
 
 
 class TextTest(SingleEntryTest):
@@ -96,8 +119,8 @@ class TextTest(SingleEntryTest):
         assert optional.payload() == {}
 
     def test_oneline(self, element):
-        element.set_value('Qwe')
-        self.check_result(element, ['Qwe'])
+        value = 'Qwe'
+        self.check_value(element, value, [value])
 
 
 class TestShort(TextTest):
@@ -112,8 +135,8 @@ class TestParagraph(TextTest):
     elem_type = Paragraph
 
     def test_multiline(self, element):
-        element.set_value('Qwe\r\nRty\r\n')
-        self.check_result(element, ['Qwe\r\nRty\r\n'])
+        value = 'Qwe\r\nRty\r\n'
+        self.check_value(element, value, [value])
 
 
 class ChoiceTest(SingleEntryTest):

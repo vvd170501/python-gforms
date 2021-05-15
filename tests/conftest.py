@@ -47,7 +47,7 @@ def session():
 
 
 @pytest.fixture(scope='package')
-def load_form(session):  # !!
+def load_form(session):
 
     @skip_requests_exceptions
     def load_form(url):
