@@ -18,6 +18,10 @@ from gforms.errors import InvalidText
 from gforms.options import Option, ActionOption
 
 
+# ChoiceInput elements without "Other" option should raise InvalidChoice for empty strings
+INVALID_CHOICE = ''
+
+
 class ElementTest(ABC):
     elem_type: Type[InputElement]
     entry_ids: List[int]
@@ -96,10 +100,15 @@ class ElementTest(ABC):
         kwargs['required'] = True
         return self.elem_type(**kwargs)
 
-    @pytest.fixture(params=[False, True], ids=['optional', 'required'])
-    def element(self, kwargs, request):
-        kwargs['required'] = request.param
-        return self.elem_type(**kwargs)
+#     @pytest.fixture(params=[False, True], ids=['optional', 'required'])
+#     def element(self, kwargs, request):
+#         """Run the test for both required and optional elements"""
+#         kwargs['required'] = request.param
+#         return self.elem_type(**kwargs)
+
+    # If a test passed for a required element,
+    # then it should pass for an optional (=less restricted) element too
+    element = required
 
     def test_invalid_types(self, element, invalid_type):
         with pytest.raises(ElementTypeError):
@@ -169,6 +178,10 @@ class ChoiceTest(ElementTest):
             return choice if used_str else choice.value
         return get_choice_value
 
+    # NOTE ChoiceTest subclasses for elements which do not support "Other" values
+    # should not have a "test_empty_string" method.
+    # Empty strings are checked in test_(.*)invalid_choice methods
+
 
 class ChoiceTest1D(SingleEntryTest, ChoiceTest):
     elem_type: Type[ChoiceInput]
@@ -182,12 +195,12 @@ class ChoiceTest1D(SingleEntryTest, ChoiceTest):
     def add_options(self, kwargs, options):
         kwargs['options'] = [options]
 
-    def test_empty_string(self, element):
-        with pytest.raises(InvalidChoice):
-            element.set_value('')
-
     def test_choice(self, element, get_choice):
         self.check_value(element, get_choice(element.options[0]), [element.options[0].value])
+
+    def test_invalid_choice(self, element):
+        with pytest.raises(InvalidChoice):
+            element.set_value(INVALID_CHOICE)
 
 
 class MayHaveOther(ChoiceTest1D):
@@ -226,12 +239,10 @@ class MayHaveOther(ChoiceTest1D):
         assert self.extract_other(payload) == [other_option.value]
         assert payload == {}
 
-    def test_no_other(self, no_other, element):
-        with pytest.raises(InvalidChoice):
-            element.set_value('Not an option')
-
-
-###################################### TODO #######################################
+    # when there is no "Other" option, these elements should behave like the base class
+    # noinspection PyMethodOverriding
+    def test_invalid_choice(self, no_other, element):
+        super().test_invalid_choice(element)
 
 
 class ActionChoiceTest(ChoiceTest1D):
@@ -272,8 +283,9 @@ class TestRadio(MayHaveOther, ActionChoiceTest):
 class TestCheckboxes(MayHaveOther):
     elem_type = Checkboxes
     allow_lists = True
-    allow_choice_lists = False
-    allow_choice_strings = True
+    # iwhether or not this class allows list elements to be lists or strings
+    allow_list_lists = False
+    allow_list_strings = True
 
     @pytest.fixture
     def options(self) -> List[Option]:
@@ -290,15 +302,15 @@ class TestCheckboxes(MayHaveOther):
         payload = self.get_payload(optional, [])
         assert payload == {}
 
-    def test_invalid_choice_type(self, element, invalid_choice_type):
+    def test_list_invalid_type(self, element, invalid_list_type):
         with pytest.raises(ElementTypeError):
-            element.set_value([invalid_choice_type])
+            element.set_value([invalid_list_type])
 
-    def test_with_invalid_choice(self, no_other, element):
+    def test_list_invalid_choice(self, no_other, element):
         with pytest.raises(InvalidChoice):
-            element.set_value([element.options[0], 'Not an option'])
+            element.set_value([element.options[0], INVALID_CHOICE])
 
-    def test_choice_with_other(self, element, other_option, get_choice):
+    def test_list_with_other(self, element, other_option, get_choice):
         other_option.value = 'Other option'
         choices = [get_choice(opt) for opt in element.options] + [get_choice(other_option)]
         payload = self.get_payload(element, choices)
@@ -334,8 +346,8 @@ class TestScale(ChoiceTest1D):
 class GridTest(ChoiceTest):
     elem_type: Type[Grid]
     allow_lists = True
-    allow_entry_lists = False
-    allow_entry_strings = True
+    allow_row_lists = False
+    allow_row_strings = True
 
     row_count = 5
     col_count = 3
@@ -351,8 +363,8 @@ class GridTest(ChoiceTest):
         opt_row = [Option(value=f'Col{i}', other=False) for i in range(1, self.col_count + 1)]
         kwargs['options'] = [opt_row] * self.row_count
 
-    def test_invalid_row_type(self, element, invalid_entry_type):
-        values = [invalid_entry_type] * self.row_count
+    def test_row_invalid_type(self, element, invalid_row_type):
+        values = [invalid_row_type] * self.row_count
         values[0] = Value.EMPTY
         with pytest.raises(RowTypeError, match='Row2'):
             element.set_value(values)
@@ -374,7 +386,7 @@ class GridTest(ChoiceTest):
         assert self.extract_value(payload, index=1) == [values[1].value]
         assert payload == {}
 
-    def test_choice(self, element, get_choice, get_choice_value):
+    def test_row_choice(self, element, get_choice, get_choice_value):
         values = [
             get_choice(element.options[i % self.col_count])
             for i in range(self.row_count)
@@ -384,9 +396,9 @@ class GridTest(ChoiceTest):
             assert self.extract_value(payload, index=i) == [get_choice_value(values[i])]
         assert payload == {}
 
-    def test_invalid_row_choice(self, element):
+    def test_row_invalid_choice(self, element):
         values = [element.options[0]] * self.row_count
-        values[1] = 'Not an option;'
+        values[1] = INVALID_CHOICE
         with pytest.raises(InvalidRowChoice, match='Row2'):
             element.set_value(values)
 
@@ -397,9 +409,9 @@ class TestRadioGrid(GridTest):
 
 class TestCheckboxGrid(GridTest):
     elem_type = CheckboxGrid
-    allow_entry_lists = True
-    allow_choice_lists = False
-    allow_choice_strings = True
+    allow_row_lists = True
+    allow_row_list_lists = False
+    allow_row_list_strings = True
 
     def sample_choice(self, element, get_choice=lambda x: x):
         return [
@@ -421,13 +433,13 @@ class TestCheckboxGrid(GridTest):
         assert self.extract_value(payload, index=1) == [opt.value for opt in values[1]]
         assert payload == {}
 
-    def test_invalid_choice_type(self, element, invalid_choice_type):
+    def test_row_list_invalid_type(self, element, invalid_row_list_type):
         values = self.sample_choice(element)
-        values[1][1] = invalid_choice_type
+        values[1][1] = invalid_row_list_type
         with pytest.raises(RowTypeError):
             element.set_value(values)
 
-    def test_choices(self, element, get_choice, get_choice_value):
+    def test_row_list_choice(self, element, get_choice, get_choice_value):
         values = self.sample_choice(element, get_choice)
         payload = self.get_payload(element, values)
         for i in range(self.row_count):
@@ -435,9 +447,9 @@ class TestCheckboxGrid(GridTest):
                    [get_choice_value(choice) for choice in values[i]]
         assert payload == {}
 
-    def test_invalid_row_choices(self, element):
+    def test_row_list_invalid_choice(self, element):
         values = self.sample_choice(element)
-        values[1][1] = 'Not an option'
+        values[1][1] = INVALID_CHOICE
         with pytest.raises(InvalidRowChoice):
             element.set_value(values)
 

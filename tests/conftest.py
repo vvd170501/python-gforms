@@ -61,7 +61,7 @@ def pytest_generate_tests(metafunc):
         )
 
     for fixturename in metafunc.fixturenames:
-        match = re.match(r'invalid_([a-zA-Z0-9]+_)?type', fixturename)
+        match = re.match(r'invalid_(\w+_)?type', fixturename)
         if match:
             parametrize_invalid_types(match.group(1) or '')
 
