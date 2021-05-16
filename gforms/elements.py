@@ -13,7 +13,7 @@ from .elements_base import ChoiceValue, EmptyValue, MultiChoiceValue, TextValue,
                            GridChoiceValue, GridMultiChoiceValue
 
 from .errors import ElementTypeError, InvalidDuration, \
-    RequiredElement, RequiredRow, InvalidText
+    RequiredElement, InvalidText
 from .options import ActionOption
 from .util import add_indent, elem_separator, random_subset
 
@@ -249,12 +249,6 @@ class RadioGrid(Grid):
 
     def set_value(self, value: Union[RadioGridValue, EmptyValue]):
         self._set_grid_values(value)
-
-    def _validate_entry(self, index):
-        try:
-            super()._validate_entry(index)
-        except RequiredElement as e:
-            raise RequiredRow(self, index=e.index)
 
 
 class CheckboxGrid(Grid, MultiChoiceInput):

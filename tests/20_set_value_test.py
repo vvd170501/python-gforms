@@ -331,7 +331,6 @@ class TestScale(ChoiceTest1D):
         self.check_value(element, int(element.options[0].value), [element.options[0].value])
 
 
-@pytest.mark.skip
 class GridTest(ChoiceTest):
     elem_type: Type[Grid]
     allow_lists = True
@@ -354,7 +353,8 @@ class GridTest(ChoiceTest):
 
     def test_invalid_row_type(self, element, invalid_entry_type):
         values = [invalid_entry_type] * self.row_count
-        with pytest.raises(RowTypeError):
+        values[0] = Value.EMPTY
+        with pytest.raises(RowTypeError, match='Row2'):
             element.set_value(values)
 
     def test_invalid_size(self, element):
@@ -363,9 +363,10 @@ class GridTest(ChoiceTest):
             element.set_value(values)
 
     def test_empty_row(self, required, optional):
-        values = [required.options[0]] * (self.row_count - 1) + [Value.EMPTY]
+        values = [required.options[0]] * self.row_count
+        values[1] = Value.EMPTY
         required.set_value(values)
-        with pytest.raises(RequiredRow):
+        with pytest.raises(RequiredRow, match='Row2'):
             required.validate()
         values = [Value.EMPTY] * self.row_count
         values[1] = optional.options[0]
@@ -386,7 +387,7 @@ class GridTest(ChoiceTest):
     def test_invalid_row_choice(self, element):
         values = [element.options[0]] * self.row_count
         values[1] = 'Not an option;'
-        with pytest.raises(InvalidRowChoice):
+        with pytest.raises(InvalidRowChoice, match='Row2'):
             element.set_value(values)
 
 

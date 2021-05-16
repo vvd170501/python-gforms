@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from datetime import date
+
 from enum import Enum, auto
 from typing import Dict, List, Literal, Union, cast, Any
 
-from .errors import DuplicateOther, EmptyOther, InvalidChoice, ElementTypeError, ElementValueError,\
-                    RequiredElement
+from .errors import DuplicateOther, EmptyOther, InvalidChoice, \
+    ElementTypeError, ElementValueError, RequiredElement, RequiredRow, RowTypeError, \
+    InvalidRowChoice
 from .options import ActionOption, Option, parse as parse_option
 
 
@@ -251,7 +252,7 @@ class ChoiceInput(InputElement, ABC):
             if opt.value == value:
                 return opt
 
-        raise InvalidChoice(self, value)
+        raise InvalidChoice(self, value, index=i)
 
     def _add_choice(self, choices, choice: Option):
         choices.append(choice.value)
@@ -419,7 +420,22 @@ class Grid(ChoiceInput):
         if len(values) != len(self.rows):
             raise ElementValueError(self, values,
                                     details='Length of choices does not match the number of rows')
-        self._set_choices([self._to_choice_list(entry_value) for entry_value in values])
+        choices = []
+        for i, entry_value in enumerate(values):
+            try:
+                choices.append(self._to_choice_list(entry_value))
+            except ElementTypeError as e:
+                raise RowTypeError(self, e.value, index=i)
+        try:
+            self._set_choices(choices)
+        except InvalidChoice as e:
+            raise InvalidRowChoice(self, e.value, index=e.index)
+
+    def _validate_entry(self, index):
+        try:
+            super()._validate_entry(index)
+        except RequiredElement as e:
+            raise RequiredRow(self, index=e.index)
 
 
 class TimeElement(SingleInput):
