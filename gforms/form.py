@@ -73,7 +73,12 @@ class Form:
         """
         fill_optional: fill optional elements if callback returned Value.DEFAULT
         """
-        for page in self.pages:
+        page = self.pages[0]
+        pages_to_submit = {page}
+        while page is not None:
+            page = page.next_page()
+            if page in pages_to_submit:
+                raise InfiniteLoop(self)
             for elem_index, elem in enumerate(page.elements):
                 if not isinstance(elem, InputElement):
                     continue
@@ -86,15 +91,8 @@ class Form:
                         (callback is None or value is Value.DEFAULT):
                     value = default_callback(elem, page.index, elem_index)
                 elem.set_value(value)
+                elem.validate()
 
-        page = self.pages[0]
-        pages_to_submit = {page}
-        while page is not None:
-            page = page.next_page()
-            if page in pages_to_submit:
-                raise InfiniteLoop(self)
-                for elem in page.elements:
-                    elem.validate()
             pages_to_submit.add(page)
 
     def submit(self, http):
