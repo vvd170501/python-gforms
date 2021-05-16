@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 
 class FormError(Exception, ABC):
     """Base error class"""
+
     def __init__(self, *args, details=None, **kwargs):
         super().__init__()
         self.details = details
@@ -71,8 +72,8 @@ class ElementTypeError(ElementError, TypeError):
         self.value = value
 
     def _message(self):
-        return 'Unsupported argument type '\
-               f'(element: "{self.elem.name}", argument: {repr(self.value)})'
+        return 'Unsupported argument type' \
+               f' (element: "{self.elem.name}", argument: {repr(self.value)})'
 
 
 class ElementValueError(ElementError, ValueError):  # not the best name
@@ -81,8 +82,8 @@ class ElementValueError(ElementError, ValueError):  # not the best name
         self.value = value
 
     def _message(self):
-        return 'Cannot fill an entry with the chosen value '\
-               f'(element: "{self.elem.name}", value: {repr(self.value)})'
+        return 'Cannot fill an entry with the chosen value' \
+               f' (element: "{self.elem.name}", value: {repr(self.value)})'
 
 
 class InvalidChoice(ElementValueError):
@@ -96,13 +97,14 @@ class DuplicateOther(ElementValueError):
         self.value2 = value2
 
     def _message(self):
-        return f'Duplicate "Other" values in "{self.elem.name}" ("{self.value}" and "{self.value2}")'
+        return f'Duplicate "Other" values in "{self.elem.name}"' \
+               f' ("{self.value}" and "{self.value2}")'
 
 
 class RowTypeError(ElementTypeError, RowError):
     def _message(self):
-        return 'Unsupported argument type ' \
-               f'(element: "{self.elem.name}", row {self.row}, argument: {repr(self.value)})'
+        return 'Unsupported argument type' \
+               f' (element: "{self.elem.name}", row {self.row}, argument: {repr(self.value)})'
 
 
 class InvalidRowChoice(InvalidChoice, RowError):
@@ -134,5 +136,33 @@ class InvalidText(InvalidValue):
 
 class InvalidDuration(InvalidValue):
     def _message(self):
-        return f'Duration value ({self.value.total_seconds()} seconds) is out of range: ' \
-               f'value should be positive and less than 73 hours '
+        return f'Duration value ({self.value.total_seconds()} seconds) is out of range:' \
+               ' value should be positive and less than 73 hours'
+
+
+class UnknownValidator(UserWarning):
+    def __init__(self, cls, value):
+        super().__init__()
+        self.cls = cls
+        self.value = value
+
+    def __str__(self):
+        return f'Unknown validator type for {self.cls.__name__}: {repr(self.value)},' \
+               ' this validator will allow any input'
+
+
+class SameColumn(InvalidValue):
+    def __init__(self, elem, value=None, column=None, *args, **kwargs):
+        super().__init__(elem, value, *args, **kwargs)
+        self.column = column
+
+    def _message(self):
+        detail = f'("{self.column}") ' if self.column else ''
+        return f'Same column {detail}is chosen in two or more rows of "{self.elem}".' \
+               ' The choices must be unique'
+
+
+class MisconfiguredGrid(SameColumn):
+    def _message(self):
+        return f'Impossible to fill grid "{self.elem}": all rows are required and the choices' \
+               ' must be unique, but there are less columns than rows'

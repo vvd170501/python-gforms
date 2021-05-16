@@ -3,8 +3,9 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 from enum import Enum, auto
-from typing import Dict, List, Literal, Union, cast, Any
+from typing import Dict, List, Literal, Union, cast, Any, Optional
 
+from .validators import GridValidator, TextValidator
 from .errors import DuplicateOther, EmptyOther, InvalidChoice, \
     ElementTypeError, ElementValueError, RequiredElement, RequiredRow, RowTypeError, \
     InvalidRowChoice
@@ -34,7 +35,6 @@ GridValue = Union[GridChoiceValue, GridMultiChoiceValue]
 
 class ElementType(Enum):
     # NOTE File upload element is not implemented
-    # TODO add custom validation for short text / paragraph / checkboxes / grid
     SHORT = 0
     PARAGRAPH = 1
     RADIO = 2
@@ -126,17 +126,20 @@ class InputElement(Element, ABC):
             self._validate_entry(i)
 
     def to_str(self, indent=0, include_answer=False):
-        s = f'{self._type_str()}: {self.name}'
+        parts = [self._type_str()]
         if self.required:
-            s += '*'
+            parts.append('*')
+        parts.append(f': {self.name}')
         if self.description:
-            s = f'{s}\n{self.description}'
+            parts.append(f'\n{self.description}')
         hints = self._hints(indent)
         if hints:
-            s = '\n'.join([s] + hints)
+            parts.append('\n')
+            parts.append('\n'.join(hints))
         if include_answer:
-            s = '\n'.join([s] + self._answer())
-        return s
+            parts.append('\n')
+            parts.append('\n'.join(self._answer()))
+        return ''.join(parts)
 
     def payload(self) -> Dict[str, List[str]]:
         payload = {}
@@ -379,6 +382,7 @@ class Grid(ChoiceInput):
     _cell_symbol = '?'
 
     class Index(InputElement.Index):
+        VALIDATOR = 8
         ROW_NAME = 3
         MULTICHOICE = 11
 
@@ -392,25 +396,35 @@ class Grid(ChoiceInput):
         res.update({
             'rows': [entry[cls.Index.ROW_NAME][0] for entry in cls._get_entries(elem)]
         })
+        if len(elem) > cls.Index.VALIDATOR:
+            res['validator'] = GridValidator.parse(elem[cls.Index.VALIDATOR])
         return res
 
-    def __init__(self, *, rows, **kwargs):
+    def __init__(self, *, rows, validator=None, **kwargs):
         super().__init__(**kwargs)
         self.rows = rows
         self.cols = self.options  # alias
+        self.validator: Optional[GridValidator] = validator
 
     @property
     def options(self):
         return self._options[0]
 
+    def is_misconfigured(self):
+        return self.required and len(self.cols) < len(self.rows)
+
     def _hints(self, indent=0):
         # NOTE row/column names may need wrapping
+        res = []
+        if self.validator is not None:
+            res.append(self.validator.to_str())
         tab = '  '
         max_length = max(len(row) for row in self.rows)
         cells = ' '.join(f'{self._cell_symbol:^{len(col.value)}}' for col in self.cols)
-        header = [tab + ' ' * (max_length + 1) + '|'.join([str(opt) for opt in self.options])]
-        rows = [tab + f'{row:>{max_length}} ' + cells for row in self.rows]
-        return header + rows
+        res += [tab + ' ' * (max_length + 1) + '|'.join([str(opt) for opt in self.options])]
+        res += [tab + f'{row:>{max_length}} ' + cells for row in self.rows]
+
+        return res
 
     def _set_grid_values(self, values: Union[GridValue, EmptyValue]):
         if values is Value.EMPTY:
@@ -425,17 +439,22 @@ class Grid(ChoiceInput):
             try:
                 choices.append(self._to_choice_list(entry_value))
             except ElementTypeError as e:
-                raise RowTypeError(self, e.value, index=i)
+                raise RowTypeError(self, e.value, index=i) from e
         try:
             self._set_choices(choices)
         except InvalidChoice as e:
-            raise InvalidRowChoice(self, e.value, index=e.index)
+            raise InvalidRowChoice(self, e.value, index=e.index) from e
 
     def _validate_entry(self, index):
         try:
             super()._validate_entry(index)
         except RequiredElement as e:
             raise RequiredRow(self, index=e.index)
+
+    def validate(self):
+        super().validate()
+        if self.validator is not None:
+            self.validator.validate(self, self._values)
 
 
 class TimeElement(SingleInput):
@@ -531,6 +550,14 @@ class MediaElement(Element):
 
 
 class TextInput(SingleInput):
+    @classmethod
+    def _parse(cls, elem):
+        return super()._parse(elem)
+
+    def __init__(self, *, validator=None, **kwargs):
+        super().__init__(**kwargs)
+        self.validator: Optional[TextValidator] = validator  # TODO to_str
+
     def set_value(self, value: Union[TextValue, EmptyValue]):
         if isinstance(value, str):
             if not value:
@@ -540,6 +567,11 @@ class TextInput(SingleInput):
         if value is Value.EMPTY:
             return self._set_value(value)
         raise ElementTypeError(self, value)
+
+    def _validate_entry(self, index):  # index == 0
+        super()._validate_entry(index)
+        if self.validator is not None and self._values[index]:
+            self.validator.validate(self._values[index][0])
 
 
 class ActionChoiceInput(ChoiceInput1D):

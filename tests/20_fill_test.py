@@ -5,8 +5,8 @@ from typing import Type, List
 import pytest
 
 from gforms import Form
-from gforms.elements_base import InputElement, TextInput, DateElement, ChoiceInput, Grid, \
-    ActionChoiceInput, Action
+from gforms.elements_base import Action, InputElement, ChoiceInput, ActionChoiceInput, \
+                                 Grid, DateElement, TextInput
 from gforms.elements import ElementType, Value, CheckboxGridValue
 from gforms.elements import Short, Paragraph
 from gforms.elements import Checkboxes, Dropdown, Radio, Scale
@@ -16,12 +16,15 @@ from gforms.elements import Page
 
 from gforms.errors import ElementTypeError, ElementValueError, RequiredElement, InvalidChoice, \
     EmptyOther, InvalidDuration, RequiredRow, InvalidRowChoice, RowTypeError, DuplicateOther, \
-    InfiniteLoop
+    InfiniteLoop, MisconfiguredGrid, SameColumn
 from gforms.errors import InvalidText
 from gforms.options import Option, ActionOption
+from gforms.validators import GridValidator
 
 
 # ChoiceInput elements without "Other" option should raise InvalidChoice for empty strings
+
+
 INVALID_CHOICE = ''
 
 
@@ -144,6 +147,10 @@ class TextTest(SingleEntryTest):
     def test_oneline(self, element):
         value = 'Qwe'
         self.check_value(element, value, [value])
+
+    @pytest.mark.skip
+    def test_validator(self):
+        assert 0  # TODO
 
 
 class TestShort(TextTest):
@@ -371,6 +378,10 @@ class GridTest(ChoiceTest):
         opt_row = [Option(value=f'Col{i}', other=False) for i in range(1, self.col_count + 1)]
         kwargs['options'] = [opt_row] * self.row_count
 
+    @pytest.fixture
+    def with_validator(self, element):
+        element.validator = GridValidator(type_=GridValidator.Type.EXCLUSIVE_COLUMNS)
+
     def test_row_invalid_type(self, element, invalid_row_type):
         values = [invalid_row_type] * self.row_count
         values[0] = Value.EMPTY
@@ -413,6 +424,22 @@ class GridTest(ChoiceTest):
 
 class TestRadioGrid(GridTest):
     elem_type = RadioGrid
+
+    @pytest.fixture
+    def wide_grid(self, kwargs, add_options):
+        # all rows are the same object -> it's sufficient to extend only the first one
+        kwargs['options'][0] *= 2
+
+    def test_misconfigured(self, element, with_validator):
+        element.set_value([element.options[0]] * len(element.rows))
+        with pytest.raises(MisconfiguredGrid):
+            element.validate()
+
+    def test_same_column(self, wide_grid, element, with_validator):
+        element.set_value([element.options[0]] * len(element.rows))
+        with pytest.raises(SameColumn) as exc_info:
+            element.validate()
+        assert exc_info.type == SameColumn
 
 
 class TestCheckboxGrid(GridTest):
@@ -602,8 +629,7 @@ class TestTransitions:
         def callback(elem, page_index, elem_index):
             if page_index == 0 and elem_index == 0:
                 return 'First'
-            return Value.DEFAULT
+            return Value.EMPTY
 
         with pytest.raises(InfiniteLoop):
             form.fill(callback, fill_optional=False)
-

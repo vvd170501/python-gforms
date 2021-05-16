@@ -76,9 +76,6 @@ class Form:
         page = self.pages[0]
         pages_to_submit = {page}
         while page is not None:
-            page = page.next_page()
-            if page in pages_to_submit:
-                raise InfiniteLoop(self)
             for elem_index, elem in enumerate(page.elements):
                 if not isinstance(elem, InputElement):
                     continue
@@ -94,6 +91,9 @@ class Form:
                 elem.set_value(value)
                 elem.validate()
 
+            page = page.next_page()
+            if page in pages_to_submit:
+                raise InfiniteLoop(self)
             pages_to_submit.add(page)
 
     def submit(self, http):

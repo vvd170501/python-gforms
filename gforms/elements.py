@@ -13,9 +13,10 @@ from .elements_base import ChoiceValue, EmptyValue, MultiChoiceValue, TextValue,
                            GridChoiceValue, GridMultiChoiceValue
 
 from .errors import ElementTypeError, InvalidDuration, \
-    RequiredElement, InvalidText
+    RequiredElement, InvalidText, MisconfiguredGrid, UnknownValidator
 from .options import ActionOption
 from .util import add_indent, elem_separator, random_subset
+from .validators import GridValidator
 
 
 __all__ = ['ElementType', 'Action', 'CallbackRetVal', 'Value',
@@ -355,6 +356,43 @@ class DateTime(DateElement):
         return answer
 
 
+def _val_grid_choices(elem):
+    if elem.is_misconfigured():
+        raise MisconfiguredGrid(elem)
+    if elem.validator.type == GridValidator.Type.UNKNOWN:
+        # Raise, not warn. Otherwise, most probably, form submission will fail
+        # If needed, custom callback should handle such cases
+        raise UnknownValidator(type(elem.validator), elem.validator.type)
+    n = len(elem.rows)
+
+    if isinstance(elem, RadioGrid):
+        if len(elem.options) >= n:
+            return random.sample(elem.options, k=n)
+        # cols < rows, not required
+        row_indices = random.sample(range(n), k=len(elem.options))
+        choices = [Value.EMPTY for _ in range(n)]
+        for opt, idx in zip(elem.options, row_indices):
+            choices[idx] = opt
+        return choices
+
+    if not elem.required:
+        row_indices = random.choices(range(n), k=len(elem.options))
+        choices = [[] for _ in range(n)]
+        for opt, idx in zip(elem.options, row_indices):
+            choices[idx].append(opt)
+        return choices
+    # Required CheckboxGrid with unique columns
+    choices = random.sample(elem.options, k=n)
+    res = [[choice] for choice in choices]
+    remaining = set(elem.options) - set(choices)
+    if not remaining:
+        return res
+    row_indices = random.choices(range(n), k=len(remaining))
+    for opt, idx in zip(remaining, row_indices):
+        res[idx].append(opt)
+    return res
+
+
 def default_callback(elem: InputElement, page_index, elem_index) -> Union[ElemValue, EmptyValue]:
     if isinstance(elem, Scale) or isinstance(elem, Dropdown):
         return random.choice(elem.options)
@@ -375,6 +413,10 @@ def default_callback(elem: InputElement, page_index, elem_index) -> Union[ElemVa
         return random_subset(elem.options, nonempty=elem.required)
 
     if isinstance(elem, Grid):
+        if elem.validator is not None:
+            # NOTE this function will choose maximal allowed number of columns,
+            # even if required is False (find a better solution or disable this feature entirely?)
+            return _val_grid_choices(elem)
         n = len(elem.rows)
         if isinstance(elem, CheckboxGrid):
             return [random_subset(elem.options, nonempty=elem.required) for _ in range(n)]

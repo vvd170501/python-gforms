@@ -12,6 +12,7 @@ from gforms.elements import Date, DateTime, Time, Duration
 
 from gforms.errors import ClosedForm, ParseError
 from gforms.options import ActionOption
+from gforms.validators import GridValidator
 
 from .conftest import BaseFormTest
 
@@ -281,3 +282,23 @@ class TestDate(ElementTest):
 class TestTime(ElementTest):
     form_type = 'time'
     expected = [[Time, Duration]]
+
+
+class TestTextValidators(ElementTest):
+    form_type = 'text_validation'
+    expected = [[Short] * 21, [Paragraph] * 6]
+
+    @pytest.mark.skip
+    def test_validators(self, pages):
+        assert 0  # TODO
+
+
+class TestGridValidators(ElementTest):
+    form_type = 'grid_validation'
+    expected = [[RadioGrid, CheckboxGrid]]
+
+    def test_validators(self, first_page):
+        r_grid, c_grid = first_page
+        assert isinstance(r_grid.validator, GridValidator)
+        assert isinstance(c_grid.validator, GridValidator)
+        assert r_grid.validator.type == GridValidator.Type.EXCLUSIVE_COLUMNS
