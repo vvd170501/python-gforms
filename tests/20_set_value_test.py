@@ -224,7 +224,7 @@ class MayHaveOther(ChoiceTest1D):
     def test_other(self, element, other_option, get_choice):
         other_option.value = 'Other option'
         payload = self.get_payload(element, get_choice(other_option))
-        assert self.extract_other(payload) == other_option.value
+        assert self.extract_other(payload) == [other_option.value]
         assert payload == {}
 
     def test_no_other(self, element, no_other):
@@ -303,7 +303,7 @@ class TestCheckboxes(MayHaveOther):
         other_option.value = 'Other option'
         choices = [get_choice(opt) for opt in element.options] + [get_choice(other_option)]
         payload = self.get_payload(element, choices)
-        assert self.extract_other(payload) == other_option.value
+        assert self.extract_other(payload) == [other_option.value]
         assert self.extract_value(payload) == [opt.value for opt in element.options]
         assert payload == {}
 

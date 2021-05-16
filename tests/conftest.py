@@ -31,9 +31,9 @@ def load_dump(form_type):
 
 def pytest_generate_tests(metafunc):
     def parametrize_invalid_types(what=''):
-        values = [{}, None, False, True]
+        values = [None, True]  # possible "if (not) value" / "if value is None" checks
         if not getattr(metafunc.cls, f'allow_{what}strings'):
-            values.append('')
+            values.append('')  # disallow strings (lists) for elements which should not accept them
         if not getattr(metafunc.cls, f'allow_{what}lists'):
             values.append([])
         metafunc.parametrize(f'invalid_{what}type', values, ids=lambda val: str(val) or '""')
