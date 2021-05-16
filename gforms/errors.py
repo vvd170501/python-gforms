@@ -87,17 +87,16 @@ class ElementValueError(ElementError, ValueError):  # not the best name
 
 class InvalidChoice(ElementValueError):
     def _message(self):
-        return f'Invalid choice in "{self.elem.name}" ({self.value})'
+        return f'Invalid choice in "{self.elem.name}" ({repr(self.value)})'
 
 
 class DuplicateOther(ElementValueError):
-    def __init__(self, elem, val1, val2, *args, **kwargs):
-        super().__init__(elem, *args, **kwargs)
-        self.val1 = val1
-        self.val2 = val2
+    def __init__(self, elem, value, value2, *args, **kwargs):
+        super().__init__(elem, value, *args, **kwargs)
+        self.value2 = value2
 
     def _message(self):
-        return f'Duplicate "Other" values in "{self.elem.name}" ("{self.val1}" and "{self.val2}")'
+        return f'Duplicate "Other" values in "{self.elem.name}" ("{self.value}" and "{self.value2}")'
 
 
 class RowTypeError(ElementTypeError, RowError):
@@ -130,7 +129,7 @@ class RequiredRow(RequiredElement, RowError):
 
 class InvalidText(InvalidValue):
     def _message(self):
-        return f'Invalid text input in "{self.elem.name}" ({self.value})'
+        return f'Invalid text input in "{self.elem.name}" ("{self.value}")'
 
 
 class InvalidDuration(InvalidValue):

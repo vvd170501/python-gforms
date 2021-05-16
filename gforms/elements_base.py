@@ -6,7 +6,7 @@ from enum import Enum, auto
 from typing import Dict, List, Literal, Union, cast, Any
 
 from .errors import DuplicateOther, EmptyOther, InvalidChoice, ElementTypeError, ElementValueError,\
-                    RequiredElement, ElementError
+                    RequiredElement
 from .options import ActionOption, Option, parse as parse_option
 
 
@@ -202,6 +202,7 @@ class SingleInput(InputElement):
 
 class ChoiceInput(InputElement, ABC):
     # basically a CheckboxGrid
+    _has_multichoice = False
 
     @classmethod
     def _parse(cls, elem):
@@ -255,14 +256,16 @@ class ChoiceInput(InputElement, ABC):
     def _add_choice(self, choices, choice: Option):
         choices.append(choice.value)
 
-    def _valid_entry_choices(self, choices: Union[MultiChoiceValue, EmptyValue, Any])\
+    def _to_choice_list(self, choices: Union[MultiChoiceValue, EmptyValue, Any])\
             -> Union[List[ChoiceValue], EmptyValue]:
         if choices is Value.EMPTY:
             return choices
         elif isinstance(choices, list):
+            if not self._has_multichoice:
+                raise ElementTypeError(self, choices)
             for choice in choices:
                 if not ChoiceInput._is_choice_value(choice):
-                    raise ElementTypeError(self, choice)
+                    raise ElementTypeError(self, choices)
             return choices
         elif ChoiceInput._is_choice_value(choices):
             return [choices]
@@ -273,8 +276,8 @@ class ChoiceInput(InputElement, ABC):
         return isinstance(value, str) or isinstance(value, Option)
 
 
-class SingleChoiceInput(ChoiceInput):
-    pass  # TODO
+class MultiChoiceInput(ChoiceInput):
+    _has_multichoice = True
 
 
 class ChoiceInput1D(ChoiceInput, SingleInput):
@@ -311,7 +314,7 @@ class OtherChoiceInput(ChoiceInput1D):
         self._other_value: Union[str, None] = None
 
     def payload(self):
-        if self._other_value is None:
+        if not self._other_value:  # '' != None (see _validate_entry)
             return super().payload()
 
         payload = super().payload()
@@ -340,6 +343,7 @@ class OtherChoiceInput(ChoiceInput1D):
 
         if self._other_value is not None:
             raise DuplicateOther(self, self._other_value, value)
+        self.other_option.value = value
         return self.other_option
 
     def _add_choice(self, choices, choice: Option):
@@ -415,7 +419,7 @@ class Grid(ChoiceInput):
         if len(values) != len(self.rows):
             raise ElementValueError(self, values,
                                     details='Length of choices does not match the number of rows')
-        self._set_choices([self._valid_entry_choices(entry_value) for entry_value in values])
+        self._set_choices([self._to_choice_list(entry_value) for entry_value in values])
 
 
 class TimeElement(SingleInput):
@@ -522,14 +526,14 @@ class TextInput(SingleInput):
         raise ElementTypeError(self, value)
 
 
-class ActionChoiceInput(ChoiceInput1D, SingleChoiceInput):
+class ActionChoiceInput(ChoiceInput1D):
     """ChoiceInput with optional actions based on choice"""
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.next_page = None
 
     def set_value(self, value: Union[ChoiceValue, EmptyValue]):
-        return self._set_choices([self._valid_entry_choices(value)])
+        return self._set_choices([self._to_choice_list(value)])
 
     def _set_choices(self, choices: List[Union[List[ChoiceValue], EmptyValue]]):
         self.next_page = None

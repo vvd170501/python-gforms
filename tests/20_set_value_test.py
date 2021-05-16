@@ -13,7 +13,7 @@ from gforms.elements import CheckboxGrid, RadioGrid
 from gforms.elements import Date, DateTime, Time, Duration
 
 from gforms.errors import ElementTypeError, ElementValueError, RequiredElement, InvalidChoice, \
-    EmptyOther, InvalidDuration, RequiredRow, InvalidRowChoice, RowTypeError
+    EmptyOther, InvalidDuration, RequiredRow, InvalidRowChoice, RowTypeError, DuplicateOther
 from gforms.errors import InvalidText
 from gforms.options import Option, ActionOption
 
@@ -119,15 +119,12 @@ class SingleEntryTest(ElementTest):
         assert payload == {}
 
 
-class AcceptsStr(ElementTest):
+class TextTest(SingleEntryTest):
+    elem_type: Type[TextInput]
     allow_strings = True
 
     def test_empty_string(self, required, optional):
         self.check_empty_value(required, optional, '')
-
-
-class TextTest(SingleEntryTest, AcceptsStr):
-    elem_type: Type[TextInput]
 
     def test_oneline(self, element):
         value = 'Qwe'
@@ -173,8 +170,9 @@ class ChoiceTest(ElementTest):
         return get_choice_value
 
 
-class ChoiceTest1D(SingleEntryTest, ChoiceTest, AcceptsStr):
+class ChoiceTest1D(SingleEntryTest, ChoiceTest):
     elem_type: Type[ChoiceInput]
+    allow_strings = True
 
     @pytest.fixture
     def options(self) -> List[Option]:
@@ -184,14 +182,12 @@ class ChoiceTest1D(SingleEntryTest, ChoiceTest, AcceptsStr):
     def add_options(self, kwargs, options):
         kwargs['options'] = [options]
 
+    def test_empty_string(self, element):
+        with pytest.raises(InvalidChoice):
+            element.set_value('')
+
     def test_choice(self, element, get_choice):
         self.check_value(element, get_choice(element.options[0]), [element.options[0].value])
-
-
-class DisallowOther(ChoiceTest1D):
-    def test_invalid_string(self, element):
-        with pytest.raises(InvalidChoice):
-            element.set_value('Not an option')
 
 
 class MayHaveOther(ChoiceTest1D):
@@ -209,13 +205,16 @@ class MayHaveOther(ChoiceTest1D):
 
     @classmethod
     def extract_other(cls, payload):
-        value = cls.get_value(payload)
+        value = cls.extract_value(payload)
         assert '__other_option__' in value
-        payload[cls._entry_key()] = [val for val in value if val != '__other_option__']
+        value = [val for val in value if val != '__other_option__']
+        if value:
+            payload[cls._entry_key()] = value
         return payload.pop(cls._entry_key() + '.other_option_response')
 
+    # noinspection PyMethodOverriding
     def test_empty_string(self, required, optional):
-        required.set_value(Value.EMPTY)
+        required.set_value('')
         with pytest.raises(EmptyOther):
             required.validate()
         payload = self.get_payload(optional, '')
@@ -227,7 +226,7 @@ class MayHaveOther(ChoiceTest1D):
         assert self.extract_other(payload) == [other_option.value]
         assert payload == {}
 
-    def test_no_other(self, element, no_other):
+    def test_no_other(self, no_other, element):
         with pytest.raises(InvalidChoice):
             element.set_value('Not an option')
 
@@ -253,16 +252,16 @@ class ActionChoiceTest(ChoiceTest1D):
         assert element.next_page == element.options[1].next_page
 
 
-class TestDropdown(ActionChoiceTest, DisallowOther):
+class TestDropdown(ActionChoiceTest):
     elem_type = Dropdown
 
 
-class TestRadio(ActionChoiceTest, MayHaveOther):
+class TestRadio(MayHaveOther, ActionChoiceTest):
     elem_type = Radio
 
     @pytest.fixture
     def other_option(self) -> Option:
-        return self._action_option('', 2000)
+        return self._action_option('', 2000, other=True)
 
     def test_other_transition(self, element, get_choice):
         element.other_option.value = 'Other_option'
@@ -295,7 +294,7 @@ class TestCheckboxes(MayHaveOther):
         with pytest.raises(ElementTypeError):
             element.set_value([invalid_choice_type])
 
-    def test_invalid_choices(self, element, no_other):
+    def test_with_invalid_choice(self, no_other, element):
         with pytest.raises(InvalidChoice):
             element.set_value([element.options[0], 'Not an option'])
 
@@ -307,8 +306,12 @@ class TestCheckboxes(MayHaveOther):
         assert self.extract_value(payload) == [opt.value for opt in element.options]
         assert payload == {}
 
+    def test_duplicate_other(self, element):
+        with pytest.raises(DuplicateOther):
+            element.set_value(['Other1', 'Other2'])
 
-class TestScale(DisallowOther):
+
+class TestScale(ChoiceTest1D):
     elem_type = Scale
 
     @pytest.fixture(autouse=True)
@@ -328,6 +331,7 @@ class TestScale(DisallowOther):
         self.check_value(element, int(element.options[0].value), [element.options[0].value])
 
 
+@pytest.mark.skip
 class GridTest(ChoiceTest):
     elem_type: Type[Grid]
     allow_lists = True
@@ -410,7 +414,7 @@ class TestCheckboxGrid(GridTest):
         required.set_value(values)
         with pytest.raises(RequiredRow):
             required.validate()
-        values: CheckboxGridValue = [Value.EMPTY] * self.row_count
+        values: CheckboxGridValue = [[]] * self.row_count
         values[1] = optional.options
         payload = self.get_payload(optional, values)
         assert self.extract_value(payload, index=1) == [opt.value for opt in values[1]]

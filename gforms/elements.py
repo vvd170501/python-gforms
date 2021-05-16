@@ -4,10 +4,10 @@ import random
 from datetime import date, datetime, time, timedelta
 from typing import List, Union, Optional
 
-from .elements_base import Action, ElementType, Value
+from .elements_base import Action, ElementType, Value, MultiChoiceInput
 from .elements_base import Element, MediaElement, InputElement, \
                            ActionChoiceInput, ChoiceInput, ChoiceInput1D, \
-                           OtherChoiceInput, SingleChoiceInput, TextInput, \
+                           OtherChoiceInput, TextInput, \
                            DateElement, Grid, TimeElement
 from .elements_base import ChoiceValue, EmptyValue, MultiChoiceValue, TextValue, \
                            GridChoiceValue, GridMultiChoiceValue
@@ -206,12 +206,12 @@ class Dropdown(ActionChoiceInput):
     pass
 
 
-class Checkboxes(OtherChoiceInput):
+class Checkboxes(OtherChoiceInput, MultiChoiceInput):
     def set_value(self, value: Union[CheckboxesValue, EmptyValue]):
-        return self._set_choices([self._valid_entry_choices(value)])
+        return self._set_choices([self._to_choice_list(value)])
 
 
-class Scale(ChoiceInput1D, SingleChoiceInput):
+class Scale(ChoiceInput1D):
     class Index(ChoiceInput.Index):
         LABELS = 3
 
@@ -233,7 +233,7 @@ class Scale(ChoiceInput1D, SingleChoiceInput):
     def set_value(self, value: Union[ScaleValue, EmptyValue]):
         if isinstance(value, int):
             value = str(value)
-        return self._set_choices([self._valid_entry_choices(value)])
+        return self._set_choices([self._to_choice_list(value)])
 
     def _hints(self, indent=0):
         hint = f'{self.options[0]} - {self.options[-1]}'
@@ -244,7 +244,7 @@ class Scale(ChoiceInput1D, SingleChoiceInput):
         return [hint]
 
 
-class RadioGrid(Grid, SingleChoiceInput):
+class RadioGrid(Grid):
     _cell_symbol = '◯'
 
     def set_value(self, value: Union[RadioGridValue, EmptyValue]):
@@ -257,7 +257,7 @@ class RadioGrid(Grid, SingleChoiceInput):
             raise RequiredRow(self, index=e.index)
 
 
-class CheckboxGrid(Grid):
+class CheckboxGrid(Grid, MultiChoiceInput):
     _cell_symbol = '□'
 
     def set_value(self, value: Union[CheckboxGridValue, EmptyValue]):
