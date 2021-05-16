@@ -72,6 +72,7 @@ class Page(Element):
         res = super()._parse(elem)
         res['prev_action'] = Action.NEXT
         if len(elem) > cls.Index.ACTION:
+            # FIRST / NEXT / SUBMIT / page id
             res['prev_action'] = elem[cls.Index.ACTION]
         return res
 

@@ -87,8 +87,9 @@ class Form:
                     value = callback(elem, page.index, elem_index)
                     if value is None:  # just in case (if callback doesn't return anything)
                         value = Value.DEFAULT
-                if (elem.required or fill_optional) and \
-                        (callback is None or value is Value.DEFAULT):
+
+                if value is Value.DEFAULT or \
+                        elem.required or fill_optional:  # value is Not DEFAULT -> callback is None
                     value = default_callback(elem, page.index, elem_index)
                 elem.set_value(value)
                 elem.validate()

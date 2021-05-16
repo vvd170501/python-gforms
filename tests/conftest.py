@@ -78,8 +78,9 @@ def url():
         from . import urls
         return urls
     else:
+        from . import form_dumps
         class FakeUrlModule:
-            yt_url = 'https://youtu.be/dQw4w9WgXcQ'
+            yt_url = form_dumps.yt_url
         return FakeUrlModule
 
 

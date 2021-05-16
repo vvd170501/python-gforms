@@ -4,6 +4,7 @@ from typing import Type, List
 
 import pytest
 
+from gforms import Form
 from gforms.elements_base import InputElement, TextInput, DateElement, ChoiceInput, Grid, \
     ActionChoiceInput, Action
 from gforms.elements import ElementType, Value, CheckboxGridValue
@@ -11,15 +12,20 @@ from gforms.elements import Short, Paragraph
 from gforms.elements import Checkboxes, Dropdown, Radio, Scale
 from gforms.elements import CheckboxGrid, RadioGrid
 from gforms.elements import Date, DateTime, Time, Duration
+from gforms.elements import Page
 
 from gforms.errors import ElementTypeError, ElementValueError, RequiredElement, InvalidChoice, \
-    EmptyOther, InvalidDuration, RequiredRow, InvalidRowChoice, RowTypeError, DuplicateOther
+    EmptyOther, InvalidDuration, RequiredRow, InvalidRowChoice, RowTypeError, DuplicateOther, \
+    InfiniteLoop
 from gforms.errors import InvalidText
 from gforms.options import Option, ActionOption
 
 
 # ChoiceInput elements without "Other" option should raise InvalidChoice for empty strings
 INVALID_CHOICE = ''
+
+
+# ---------- Individual element tests ----------
 
 
 class ElementTest(ABC):
@@ -160,8 +166,9 @@ class TestParagraph(TextTest):
 class ChoiceTest(ElementTest):
     elem_type: Type[ChoiceInput]
 
+    @staticmethod
     @pytest.fixture
-    def get_choice(self, request):
+    def get_choice(request):
         """returns Option or str (based on param)"""
         need_str = request.param
 
@@ -169,8 +176,9 @@ class ChoiceTest(ElementTest):
             return option.value if need_str else option
         return get_choice
 
+    @staticmethod
     @pytest.fixture
-    def get_choice_value(self, request):
+    def get_choice_value(request):
         """returns value of a choice: get_choice_value(get_choice) is always str"""
         used_str = request.param
 
@@ -283,7 +291,7 @@ class TestRadio(MayHaveOther, ActionChoiceTest):
 class TestCheckboxes(MayHaveOther):
     elem_type = Checkboxes
     allow_lists = True
-    # iwhether or not this class allows list elements to be lists or strings
+    # whether or not this class allows list elements to be lists or strings
     allow_list_lists = False
     allow_list_strings = True
 
@@ -526,3 +534,76 @@ class TestDuration(SingleEntryTest):
         element.set_value(duration)
         with pytest.raises(InvalidDuration):
             element.validate()
+
+
+# ---------- Page transition tests ----------
+
+
+class TestTransitions:
+    @staticmethod
+    def _page(id_):
+        return Page(id_=id_,
+             name='Test page', description=None, type_=ElementType.PAGE,
+             prev_action=Action.NEXT)
+
+    @staticmethod
+    def _dropdown(id_, entry_id, options):
+        return Dropdown(
+            id_=id_,
+            name='Test dropdown', description=None, type_=ElementType.DROPDOWN,
+            entry_ids=[entry_id],  # actually doesn't matter
+            required=False,
+            options=[options]
+        )
+
+    @staticmethod
+    @pytest.fixture
+    def form():
+        """
+        A form with 3 pages, each has 2 dropdowns.
+        Each dropdown has three options:
+            - "Go to the first page"
+            - "Go to the second page"
+            - "Go to submit page"
+        """
+        pages = [Page.first()] + [TestTransitions._page(100000 + 1000 * i) for i in range(2)]
+        for page in pages:
+            for i in range(2):
+                options = [
+                    ActionOption(value=f'First', other=False, action=Action.FIRST),
+                    ActionOption(value=f'Second', other=False, action=pages[1].id),
+                    ActionOption(value=f'Submit', other=False, action=Action.SUBMIT),
+                ]
+                page.append(TestTransitions._dropdown(id_=page.id + 100 * i,  # just unique ids
+                                                      entry_id=page.id + 100 * i + 10,
+                                                      options=options))
+        form = Form('')
+        form.pages = pages
+        form._resolve_actions()
+        return form
+
+    def test_single_element(self, form):
+        page = form.pages[0]
+        page.elements[0].set_value('First')
+        assert page.next_page() == form.pages[0]
+
+    def test_multiple_elements(self, form):
+        page = form.pages[0]
+        page.elements[0].set_value('First')
+        page.elements[0].set_value('Submit')
+        assert page.next_page() == Page.SUBMIT
+
+    def test_ignored_transitions(self, form):
+        page = form.pages[-1]
+        page.elements[0].set_value('First')
+        assert page.next_page() is None
+
+    def test_infinite_loop(self, form: Form):
+        def callback(elem, page_index, elem_index):
+            if page_index == 0 and elem_index == 0:
+                return 'First'
+            return Value.DEFAULT
+
+        with pytest.raises(InfiniteLoop):
+            form.fill(callback, fill_optional=False)
+
