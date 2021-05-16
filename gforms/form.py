@@ -4,8 +4,8 @@ from typing import Callable, Optional
 
 from bs4 import BeautifulSoup
 
-from .elements_base import Element, InputElement
-from .elements import Action, ElementType, Page, Value, parse as parse_element
+from .elements_base import InputElement
+from .elements import Action, Element, Page, Value, parse as parse_element
 from .elements import CallbackRetVal, default_callback
 from .errors import ClosedForm, InfiniteLoop, ParseError
 from .util import add_indent, page_separator
@@ -133,8 +133,8 @@ class Form:
         if form[self.Index.FIELDS] is None:
             return
         for elem in form[self.Index.FIELDS]:
-            el_type = ElementType(elem[Element.Index.TYPE])
-            if el_type == ElementType.PAGE:
+            el_type = Element.Type(elem[Element.Index.TYPE])
+            if el_type == Element.Type.PAGE:
                 self.pages.append(Page.parse(elem).with_index(len(self.pages)))
                 continue
             self.pages[-1].append(parse_element(elem))

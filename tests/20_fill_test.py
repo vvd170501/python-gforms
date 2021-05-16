@@ -5,9 +5,9 @@ from typing import Type, List
 import pytest
 
 from gforms import Form
-from gforms.elements_base import Action, InputElement, ChoiceInput, ActionChoiceInput, \
+from gforms.elements_base import Action, Element, InputElement, ChoiceInput, ActionChoiceInput, \
                                  Grid, DateElement, TextInput
-from gforms.elements import ElementType, Value, CheckboxGridValue
+from gforms.elements import Value, CheckboxGridValue
 from gforms.elements import Short, Paragraph
 from gforms.elements import Checkboxes, Dropdown, Radio, Scale
 from gforms.elements import CheckboxGrid, RadioGrid
@@ -78,15 +78,15 @@ class ElementTest(ABC):
         assert cls.get_payload(optional, value) == {}
 
     _type_mapping = {
-        Short: ElementType.SHORT,
-        Paragraph: ElementType.PARAGRAPH,
-        Checkboxes: ElementType.CHECKBOXES,
-        Dropdown: ElementType.DROPDOWN,
-        Radio: ElementType.RADIO,
-        Scale: ElementType.SCALE,
-        CheckboxGrid: ElementType.GRID, RadioGrid: ElementType.GRID,
-        Date: ElementType.DATE, DateTime: ElementType.DATE,
-        Time: ElementType.TIME, Duration: ElementType.TIME,
+        Short: Element.Type.SHORT,
+        Paragraph: Element.Type.PARAGRAPH,
+        Checkboxes: Element.Type.CHECKBOXES,
+        Dropdown: Element.Type.DROPDOWN,
+        Radio: Element.Type.RADIO,
+        Scale: Element.Type.SCALE,
+        CheckboxGrid: Element.Type.GRID, RadioGrid: Element.Type.GRID,
+        Date: Element.Type.DATE, DateTime: Element.Type.DATE,
+        Time: Element.Type.TIME, Duration: Element.Type.TIME,
     }
 
     @property
@@ -337,6 +337,10 @@ class TestCheckboxes(MayHaveOther):
         with pytest.raises(DuplicateOther):
             element.set_value(['Other1', 'Other2'])
 
+    def test_duplicate_other_opt(self, element):
+        with pytest.raises(DuplicateOther):
+            element.set_value([element.other_option, element.other_option])
+
 
 class TestScale(ChoiceTest1D):
     elem_type = Scale
@@ -570,14 +574,14 @@ class TestTransitions:
     @staticmethod
     def _page(id_):
         return Page(id_=id_,
-             name='Test page', description=None, type_=ElementType.PAGE,
-             prev_action=Action.NEXT)
+                    name='Test page', description=None, type_=Element.Type.PAGE,
+                    prev_action=Action.NEXT)
 
     @staticmethod
     def _dropdown(id_, entry_id, options):
         return Dropdown(
             id_=id_,
-            name='Test dropdown', description=None, type_=ElementType.DROPDOWN,
+            name='Test dropdown', description=None, type_=Element.Type.DROPDOWN,
             entry_ids=[entry_id],  # actually doesn't matter
             required=False,
             options=[options]

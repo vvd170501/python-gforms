@@ -33,23 +33,6 @@ GridMultiChoiceValue = List[
 GridValue = Union[GridChoiceValue, GridMultiChoiceValue]
 
 
-class ElementType(Enum):
-    # NOTE File upload element is not implemented
-    SHORT = 0
-    PARAGRAPH = 1
-    RADIO = 2
-    DROPDOWN = 3
-    CHECKBOXES = 4
-    SCALE = 5
-    COMMENT = 6
-    GRID = 7
-    PAGE = 8
-    DATE = 9
-    TIME = 10
-    IMAGE = 11
-    VIDEO = 12
-
-
 class Action:
     FIRST = -1
     NEXT = -2
@@ -57,6 +40,22 @@ class Action:
 
 
 class Element:
+    class Type(Enum):
+        # NOTE File upload element is not implemented
+        SHORT = 0
+        PARAGRAPH = 1
+        RADIO = 2
+        DROPDOWN = 3
+        CHECKBOXES = 4
+        SCALE = 5
+        COMMENT = 6
+        GRID = 7
+        PAGE = 8
+        DATE = 9
+        TIME = 10
+        IMAGE = 11
+        VIDEO = 12
+
     class Index:
         ID = 0
         NAME = 1
@@ -73,7 +72,7 @@ class Element:
             'id_': elem[cls.Index.ID],
             'name': elem[cls.Index.NAME],
             'description': elem[cls.Index.DESCRIPTION],  # may be None
-            'type_': ElementType(elem[cls.Index.TYPE]),
+            'type_': Element.Type(elem[cls.Index.TYPE]),
         }
 
     def __init__(self, *, id_, name, description, type_):

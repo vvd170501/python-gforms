@@ -4,7 +4,7 @@ import random
 from datetime import date, datetime, time, timedelta
 from typing import List, Union, Optional
 
-from .elements_base import Action, ElementType, Value, MultiChoiceInput
+from .elements_base import Action, Value, MultiChoiceInput
 from .elements_base import Element, MediaElement, InputElement, \
                            ActionChoiceInput, ChoiceInput, ChoiceInput1D, \
                            OtherChoiceInput, TextInput, \
@@ -19,7 +19,7 @@ from .util import add_indent, elem_separator, random_subset
 from .validators import GridValidator
 
 
-__all__ = ['ElementType', 'Action', 'CallbackRetVal', 'Value',
+__all__ = ['Element', 'Action', 'CallbackRetVal', 'Value',
            'Page', 'Comment', 'Image', 'Video',
            'Short', 'Paragraph', 'Radio', 'Dropdown', 'Checkboxes', 'Scale',
            'RadioGrid', 'CheckboxGrid',
@@ -64,7 +64,7 @@ class Page(Element):
             id_=Action.FIRST,
             name=None,
             description=None,
-            type_=ElementType.PAGE,
+            type_=Element.Type.PAGE,
             prev_action=Action.NEXT,  # ignored
         ).with_index(0)
 
@@ -144,7 +144,7 @@ class Page(Element):
 
 
 Page.SUBMIT = Page(id_=Action.SUBMIT, name=None, description=None,
-                   type_=ElementType.PAGE, prev_action=None).with_index(Action.SUBMIT)
+                   type_=Element.Type.PAGE, prev_action=None).with_index(Action.SUBMIT)
 
 
 class Comment(Element):
@@ -250,6 +250,9 @@ class RadioGrid(Grid):
     _cell_symbol = '◯'
 
     def set_value(self, value: Union[RadioGridValue, EmptyValue]):
+        # Maybe it's better to allow list of lists with lengths <= 1
+        # grid.set_value([[val1], [], [val3], ...])
+        # instead of grid.set_value([val1, Value.EMPTY, val3, ...])
         self._set_grid_values(value)
 
 
@@ -429,7 +432,7 @@ def default_callback(elem: InputElement, page_index, elem_index) -> Union[ElemVa
     raise NotImplementedError(f'Cannot choose a random value for {elem._type_str()}')
 
 
-_element_mapping = {getattr(ElementType, el_type.__name__.upper()): el_type for el_type in [
+_element_mapping = {getattr(Element.Type, el_type.__name__.upper()): el_type for el_type in [
     Short, Paragraph,
     Radio, Dropdown, Checkboxes, Scale,
     Comment, Page, Image, Video,
@@ -437,12 +440,12 @@ _element_mapping = {getattr(ElementType, el_type.__name__.upper()): el_type for 
 
 
 def parse(elem):
-    el_type = ElementType(elem[Element.Index.TYPE])
-    if el_type is ElementType.GRID:
+    el_type = Element.Type(elem[Element.Index.TYPE])
+    if el_type is Element.Type.GRID:
         cls = CheckboxGrid if Grid.parse_multichoice(elem) else RadioGrid
-    elif el_type is ElementType.DATE:
+    elif el_type is Element.Type.DATE:
         cls = DateTime if DateElement.parse_time_flag(elem) else Date
-    elif el_type is ElementType.TIME:
+    elif el_type is Element.Type.TIME:
         cls = Duration if TimeElement.parse_duration_flag(elem) else Time
     else:
         cls = _element_mapping[el_type]

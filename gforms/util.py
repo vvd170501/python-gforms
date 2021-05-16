@@ -35,6 +35,6 @@ def random_subset(a, nonempty=True):
 
     res = subset(a)
     if nonempty:
-        while not res:  # P <= 1/16
+        while not res:  # P(>2 iters) <= 1/16
             res = subset(a)
     return res
