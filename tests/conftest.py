@@ -1,3 +1,4 @@
+import re
 from abc import ABC, abstractmethod
 from pathlib import Path
 
@@ -29,13 +30,43 @@ def load_dump(form_type):
 
 
 def pytest_generate_tests(metafunc):
-    if 'invalid_type' in metafunc.fixturenames:
+    def parametrize_invalid_types(what=''):
         values = [{}, None, False, True]
-        if not metafunc.cls.allow_strings:
+        if not getattr(metafunc.cls, f'allow_{what}strings'):
             values.append('')
-        if not metafunc.cls.allow_lists:
+        if not getattr(metafunc.cls, f'allow_{what}lists'):
             values.append([])
-        metafunc.parametrize('invalid_type', values, ids=lambda val: str(val) or '""')
+        metafunc.parametrize(f'invalid_{what}type', values, ids=lambda val: str(val) or '""')
+
+    def parametrize_choice_types(uses_choice_getter, uses_choice_val_getter):
+        """
+        Parametrize fixture(s) for testing ChoiceValue
+        If both fixtures are requested, parametrize them with matching values
+        """
+        fixtures = []
+        if uses_choice_getter:
+            fixtures.append('get_choice')
+        if uses_choice_val_getter:
+            fixtures.append('get_choice_value')
+        values = [(True, True), (False, False)] if uses_choice_getter and uses_choice_val_getter \
+            else [True, False]
+        metafunc.parametrize(
+            ', '.join(fixtures),
+            values,
+            indirect=fixtures,
+            ids=['str', 'Option']
+        )
+
+    for fixturename in metafunc.fixturenames:
+        match = re.match(r'invalid_([a-zA-Z0-9]+_)?type', fixturename)
+        if match:
+            parametrize_invalid_types(match.group(1) or '')
+
+    # Test with Option and str values
+    uses_choice_getter = 'get_choice' in metafunc.fixturenames
+    uses_choice_val_getter = 'get_choice_value' in metafunc.fixturenames
+    if uses_choice_getter or uses_choice_val_getter:
+        parametrize_choice_types(uses_choice_getter, uses_choice_val_getter)
 
 
 @pytest.fixture(scope='session')

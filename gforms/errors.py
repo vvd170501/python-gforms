@@ -100,9 +100,15 @@ class DuplicateOther(ElementValueError):
         return f'Duplicate "Other" values in "{self.elem.name}" ("{self.val1}" and "{self.val2}")'
 
 
+class RowTypeError(ElementTypeError, RowError):
+    def _message(self):
+        return 'Unsupported argument type ' \
+               f'(element: "{self.elem.name}", row {self.row}, argument: {repr(self.value)})'
+
+
 class InvalidRowChoice(InvalidChoice, RowError):
     def _message(self):
-        return f'Invalid choice in "{self.elem.name}" ({self.value})'
+        return f'Invalid choice in "{self.elem.name}" ({self.value}) (row {self.row})'
 
 
 # The following errors may be raised from InputElement.validate

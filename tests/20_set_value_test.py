@@ -1,19 +1,19 @@
 from abc import ABC, abstractmethod
 from datetime import date, datetime, time, timedelta
-from typing import Type, List, Union
+from typing import Type, List
 
 import pytest
 
 from gforms.elements_base import InputElement, TextInput, DateElement, ChoiceInput, Grid, \
     ActionChoiceInput, Action
-from gforms.elements import ElementType, Value
+from gforms.elements import ElementType, Value, CheckboxGridValue
 from gforms.elements import Short, Paragraph
 from gforms.elements import Checkboxes, Dropdown, Radio, Scale
 from gforms.elements import CheckboxGrid, RadioGrid
 from gforms.elements import Date, DateTime, Time, Duration
 
 from gforms.errors import ElementTypeError, ElementValueError, RequiredElement, InvalidChoice, \
-    EmptyOther, InvalidDuration
+    EmptyOther, InvalidDuration, RequiredRow, InvalidRowChoice, RowTypeError
 from gforms.errors import InvalidText
 from gforms.options import Option, ActionOption
 
@@ -151,10 +151,29 @@ class TestParagraph(TextTest):
         self.check_value(element, value, [value])
 
 
-###################################### TODO #######################################
+class ChoiceTest(ElementTest):
+    elem_type: Type[ChoiceInput]
+
+    @pytest.fixture
+    def get_choice(self, request):
+        """returns Option or str (based on param)"""
+        need_str = request.param
+
+        def get_choice(option):
+            return option.value if need_str else option
+        return get_choice
+
+    @pytest.fixture
+    def get_choice_value(self, request):
+        """returns value of a choice: get_choice_value(get_choice) is always str"""
+        used_str = request.param
+
+        def get_choice_value(choice):
+            return choice if used_str else choice.value
+        return get_choice_value
 
 
-class ChoiceTest1D(SingleEntryTest, AcceptsStr):
+class ChoiceTest1D(SingleEntryTest, ChoiceTest, AcceptsStr):
     elem_type: Type[ChoiceInput]
 
     @pytest.fixture
@@ -165,11 +184,11 @@ class ChoiceTest1D(SingleEntryTest, AcceptsStr):
     def add_options(self, kwargs, options):
         kwargs['options'] = [options]
 
-    def test_option(self, element, options):
-        self.check_value(element, options[0], [options[0].value])
+    def test_choice(self, element, options, get_choice):
+        self.check_value(element, get_choice(options[0]), [options[0].value])
 
-    def test_string(self, element, options):
-        self.check_value(element, options[0].value, [options[0].value])
+
+###################################### TODO #######################################
 
 
 class DisallowOther(ChoiceTest1D):
@@ -226,6 +245,15 @@ class TestCheckboxes(ChoiceWithOther):
     @pytest.fixture
     def other_option(self) -> Option:
         return Option(value='', other=True)
+
+    def test_empty_string(self, required, optional):
+        required.set_value(Value.EMPTY)
+        with pytest.raises(EmptyOther):
+            required.validate()
+        payload = self.get_payload(optional, '')
+        assert self.extract_value(payload) == '__other_option__'
+        assert payload == {self._entry_key() + '.other_option_response': ''}
+
     # TODO
 
 
@@ -263,14 +291,19 @@ class TestScale(SingleChoice1D, DisallowOther):
         self.check_value(element, int(options[0].value), options[0].value)
 
 
-class GridTest(ElementTest):
+###################################### !TODO #######################################
+
+
+class GridTest(ChoiceTest):
+    elem_type: Type[Grid]
     allow_lists = True
+    allow_entry_lists = False
+    allow_entry_strings = True
 
     row_count = 5
     col_count = 3
 
     entry_ids = list(range(123, 123 + row_count))
-    elem_type: Type[Grid]
 
     @pytest.fixture(autouse=True)
     def add_rows(self, kwargs):
@@ -278,21 +311,96 @@ class GridTest(ElementTest):
 
     @pytest.fixture(autouse=True)
     def add_options(self, kwargs):
-        opt_row = [f'Col{i}' for i in range(1, self.col_count + 1)]
-        kwargs['options'] = opt_row * self.row_count
+        opt_row = [Option(value=f'Col{i}', other=False) for i in range(1, self.col_count + 1)]
+        kwargs['options'] = [opt_row] * self.row_count
+
+    def test_invalid_row_type(self, element, invalid_entry_type):
+        values = [invalid_entry_type] * self.row_count
+        with pytest.raises(ElementTypeError):
+            element.set_value(values)
+
+    def test_invalid_size(self, element):
+        values = [element.options[0]] * (self.row_count + 1)
+        with pytest.raises(ElementValueError, match=r'Length .* does not match'):
+            element.set_value(values)
+
+    def test_empty_row(self, required, optional):
+        values = [required.options[0]] * (self.row_count - 1) + [Value.EMPTY]
+        required.set_value(values)
+        with pytest.raises(RequiredRow):
+            required.validate()
+        values = [Value.EMPTY] * self.row_count
+        values[1] = optional.options[0]
+        payload = self.get_payload(optional, values)
+        assert self.extract_value(payload, index=1) == [values[1].value]
+        assert payload == {}
+
+    def test_choice(self, element, get_choice, get_choice_value):
+        values = [
+            get_choice(element.options[i % self.col_count])
+            for i in range(self.row_count)
+        ]
+        payload = self.get_payload(element, values)
+        for i in range(self.row_count):
+            assert self.extract_value(payload, index=i) == [get_choice_value(values[i])]
+        assert payload == {}
+
+    def test_invalid_row_choice(self, element):
+        values = [element.options[0]] * self.row_count
+        values[1] = 'Not an option;'
+        with pytest.raises(InvalidRowChoice):
+            element.set_value(values)
 
 
 class TestRadioGrid(GridTest):
     elem_type = RadioGrid
-    # TODO
 
 
 class TestCheckboxGrid(GridTest):
     elem_type = CheckboxGrid
-    # TODO
+    allow_entry_lists = True
+    allow_choice_lists = False
+    allow_choice_strings = True
 
+    def sample_choice(self, element, get_choice=lambda x: x):
+        return [
+            [
+                get_choice(element.options[i % self.col_count]),
+                get_choice(element.options[(i + 1) % self.col_count])
+            ]
+            for i in range(self.row_count)
+        ]
 
-###################################### !TODO #######################################
+    def test_empty_row_list(self, required, optional):
+        values = self.sample_choice(required)[:-1] + [[]]
+        required.set_value(values)
+        with pytest.raises(RequiredRow):
+            required.validate()
+        values: CheckboxGridValue = [Value.EMPTY] * self.row_count
+        values[1] = optional.options
+        payload = self.get_payload(optional, values)
+        assert self.extract_value(payload, index=1) == [opt.value for opt in values[1]]
+        assert payload == {}
+
+    def test_invalid_choice_type(self, element, invalid_choice_type):
+        values = self.sample_choice(element)
+        values[1][1] = invalid_choice_type
+        with pytest.raises(RowTypeError):
+            element.set_value(values)
+
+    def test_choices(self, element, get_choice, get_choice_value):
+        values = self.sample_choice(element, get_choice)
+        payload = self.get_payload(element, values)
+        for i in range(self.row_count):
+            assert self.extract_value(payload, index=i) == \
+                   [get_choice_value(choice) for choice in values[i]]
+        assert payload == {}
+
+    def test_invalid_row_choices(self, element):
+        values = self.sample_choice(element)
+        values[1][1] = 'Not an option'
+        with pytest.raises(InvalidRowChoice):
+            element.set_value(values)
 
 
 class DateTest(SingleEntryTest):
