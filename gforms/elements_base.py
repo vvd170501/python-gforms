@@ -246,7 +246,7 @@ class ChoiceInput(InputElement, ABC):
             # assuming value was chosen from self.options
             return value
 
-        for opt in self.options[i]:
+        for opt in self._options[i]:
             if opt.value == value:
                 return opt
 
@@ -263,6 +263,7 @@ class ChoiceInput(InputElement, ABC):
             for choice in choices:
                 if not ChoiceInput._is_choice_value(choice):
                     raise ElementTypeError(self, choice)
+            return choices
         elif ChoiceInput._is_choice_value(choices):
             return [choices]
         raise ElementTypeError(self, choices)

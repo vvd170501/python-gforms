@@ -184,11 +184,8 @@ class ChoiceTest1D(SingleEntryTest, ChoiceTest, AcceptsStr):
     def add_options(self, kwargs, options):
         kwargs['options'] = [options]
 
-    def test_choice(self, element, options, get_choice):
-        self.check_value(element, get_choice(options[0]), [options[0].value])
-
-
-###################################### TODO #######################################
+    def test_choice(self, element, get_choice):
+        self.check_value(element, get_choice(element.options[0]), [element.options[0].value])
 
 
 class DisallowOther(ChoiceTest1D):
@@ -197,11 +194,7 @@ class DisallowOther(ChoiceTest1D):
             element.set_value('Not an option')
 
 
-class SingleChoice1D(ChoiceTest1D):
-    pass  # TODO ?
-
-
-class ChoiceWithOther(ChoiceTest1D):
+class MayHaveOther(ChoiceTest1D):
     @pytest.fixture
     def other_option(self) -> Option:
         raise NotImplementedError()
@@ -214,13 +207,35 @@ class ChoiceWithOther(ChoiceTest1D):
     def no_other(self, kwargs):
         kwargs['other_option'] = None
 
-    def test_empty_other(self, required, optional):
-        required.set_value('')
+    @classmethod
+    def extract_other(cls, payload):
+        value = cls.get_value(payload)
+        assert '__other_option__' in value
+        payload[cls._entry_key()] = [val for val in value if val != '__other_option__']
+        return payload.pop(cls._entry_key() + '.other_option_response')
+
+    def test_empty_string(self, required, optional):
+        required.set_value(Value.EMPTY)
         with pytest.raises(EmptyOther):
             required.validate()
+        payload = self.get_payload(optional, '')
+        assert payload == {}
+
+    def test_other(self, element, other_option, get_choice):
+        other_option.value = 'Other option'
+        payload = self.get_payload(element, get_choice(other_option))
+        assert self.extract_other(payload) == other_option.value
+        assert payload == {}
+
+    def test_no_other(self, element, no_other):
+        with pytest.raises(InvalidChoice):
+            element.set_value('Not an option')
 
 
-class ActionChoiceTest(SingleChoice1D):
+###################################### TODO #######################################
+
+
+class ActionChoiceTest(ChoiceTest1D):
     elem_type: Type[ActionChoiceInput]
 
     @staticmethod
@@ -231,12 +246,35 @@ class ActionChoiceTest(SingleChoice1D):
 
     @pytest.fixture
     def options(self) -> List[Option]:
-        return [self._action_option(f'Val{i}', 1000 + i) for i in range(3)]
+        return [self._action_option(f'Val{i}', 1000 + i) for i in range(1, 4)]
+
+    def test_transition(self, element, get_choice):
+        self.get_payload(element, get_choice(element.options[1]))
+        assert element.next_page == element.options[1].next_page
 
 
-class TestCheckboxes(ChoiceWithOther):
+class TestDropdown(ActionChoiceTest, DisallowOther):
+    elem_type = Dropdown
+
+
+class TestRadio(ActionChoiceTest, MayHaveOther):
+    elem_type = Radio
+
+    @pytest.fixture
+    def other_option(self) -> Option:
+        return self._action_option('', 2000)
+
+    def test_other_transition(self, element, get_choice):
+        element.other_option.value = 'Other_option'
+        self.get_payload(element, get_choice(element.other_option))
+        assert element.next_page == element.other_option.next_page
+
+
+class TestCheckboxes(MayHaveOther):
     elem_type = Checkboxes
     allow_lists = True
+    allow_choice_lists = False
+    allow_choice_strings = True
 
     @pytest.fixture
     def options(self) -> List[Option]:
@@ -246,32 +284,31 @@ class TestCheckboxes(ChoiceWithOther):
     def other_option(self) -> Option:
         return Option(value='', other=True)
 
-    def test_empty_string(self, required, optional):
-        required.set_value(Value.EMPTY)
-        with pytest.raises(EmptyOther):
+    def test_empty_list(self, required, optional):
+        required.set_value([])
+        with pytest.raises(RequiredElement):
             required.validate()
-        payload = self.get_payload(optional, '')
-        assert self.extract_value(payload) == '__other_option__'
-        assert payload == {self._entry_key() + '.other_option_response': ''}
+        payload = self.get_payload(optional, [])
+        assert payload == {}
 
-    # TODO
+    def test_invalid_choice_type(self, element, invalid_choice_type):
+        with pytest.raises(ElementTypeError):
+            element.set_value([invalid_choice_type])
+
+    def test_invalid_choices(self, element, no_other):
+        with pytest.raises(InvalidChoice):
+            element.set_value([element.options[0], 'Not an option'])
+
+    def test_choice_with_other(self, element, other_option, get_choice):
+        other_option.value = 'Other option'
+        choices = [get_choice(opt) for opt in element.options] + [get_choice(other_option)]
+        payload = self.get_payload(element, choices)
+        assert self.extract_other(payload) == other_option.value
+        assert self.extract_value(payload) == [opt.value for opt in element.options]
+        assert payload == {}
 
 
-class TestDropdown(ActionChoiceTest, DisallowOther):
-    elem_type = Dropdown
-    # TODO
-
-
-class TestRadio(ActionChoiceTest, ChoiceWithOther):
-    elem_type = Radio
-
-    @pytest.fixture
-    def other_option(self) -> Option:
-        return self._action_option('', 2000)
-    # TODO
-
-
-class TestScale(SingleChoice1D, DisallowOther):
+class TestScale(DisallowOther):
     elem_type = Scale
 
     @pytest.fixture(autouse=True)
@@ -287,11 +324,8 @@ class TestScale(SingleChoice1D, DisallowOther):
         with pytest.raises(InvalidChoice):
             element.set_value(999)
 
-    def test_int(self, element, options):
-        self.check_value(element, int(options[0].value), options[0].value)
-
-
-###################################### !TODO #######################################
+    def test_int(self, element):
+        self.check_value(element, int(element.options[0].value), [element.options[0].value])
 
 
 class GridTest(ChoiceTest):
@@ -316,7 +350,7 @@ class GridTest(ChoiceTest):
 
     def test_invalid_row_type(self, element, invalid_entry_type):
         values = [invalid_entry_type] * self.row_count
-        with pytest.raises(ElementTypeError):
+        with pytest.raises(RowTypeError):
             element.set_value(values)
 
     def test_invalid_size(self, element):
