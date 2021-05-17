@@ -185,6 +185,7 @@ class TextValidator:
         if self.subtype is NumberTypes.IS_NUMBER:
             # NOTE will return True for "NaN", "Inf" and "Infinity".
             # JS validator accepts only the last one.
+            # It was not tested if these values pass the server-side validation
             return True
         arg = self.args[0]
         if self.subtype is NumberTypes.GT:
@@ -196,7 +197,9 @@ class TextValidator:
         if self.subtype is NumberTypes.lE:
             return val <= arg
         if self.subtype is NumberTypes.EQ:
-            return val == arg  # 1.99..9 == 2.0, but server accepts it
+            # if arg == 2.0, "1.99..9" will pass validation.
+            # It's ok, as long as the value is accepted by server
+            return val == arg
         if self.subtype is NumberTypes.NE:
             return val != arg
         if self.subtype is NumberTypes.RANGE:

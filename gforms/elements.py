@@ -15,7 +15,7 @@ from .elements_base import ChoiceValue, EmptyValue, MultiChoiceValue, TextValue,
 from .errors import ElementTypeError, InvalidDuration, \
     RequiredElement, InvalidText, MisconfiguredGrid, UnknownValidator
 from .options import ActionOption
-from .util import add_indent, elem_separator, random_subset
+from .util import RADIO_SYMBOLS, CHECKBOX_SYMBOLS, add_indent, elem_separator, random_subset
 from .validators import GridValidator
 
 
@@ -198,6 +198,8 @@ class Paragraph(TextInput):
 
 
 class Radio(ActionChoiceInput, OtherChoiceInput):
+    _choice_symbols = RADIO_SYMBOLS
+
     def resolve_actions(self, next_page, mapping):
         if isinstance(self.other_option, ActionOption):
             self.other_option.resolve_action(next_page, mapping)
@@ -209,6 +211,8 @@ class Dropdown(ActionChoiceInput):
 
 
 class Checkboxes(OtherChoiceInput, MultiChoiceInput):
+    _choice_symbols = CHECKBOX_SYMBOLS
+
     def set_value(self, value: Union[CheckboxesValue, EmptyValue]):
         return self._set_choices([self._to_choice_list(value)])
 
@@ -237,27 +241,36 @@ class Scale(ChoiceInput1D):
             value = str(value)
         return self._set_choices([self._to_choice_list(value)])
 
-    def _hints(self, indent=0):
-        hint = f'{self.options[0]} - {self.options[-1]}'
-        if self.low:
-            hint = f'({self.low}) {hint}'
+    def _hints(self, indent=0, modify=False):
+        max_len = 1 if len(self.options) < 10 else 2
+        tab = ' ' * (len(self.low) + 1) if self.low else ''
+        header = tab + ' '.join([f'{opt.value:^{max_len}}' for opt in self.options])
+        scale = [f'{RADIO_SYMBOLS[0]:^{max_len}}' for _ in self.options]
+        if modify and self._value:
+            scale[int(self._value[0]) - 1] = f'{RADIO_SYMBOLS[1]:^{max_len}}'
+        scale = ' '.join(scale)
+        if self.low:  # wrapping?
+            scale = f'{self.low} {scale}'
         if self.high:
-            hint = f'{hint} ({self.high})'
-        return [hint]
+            scale = f'{scale} {self.high}'
+        return [header, scale]
+
+    def _answer(self):
+        return []
 
 
 class RadioGrid(Grid):
-    _cell_symbol = '◯'
+    _cell_symbols = RADIO_SYMBOLS
 
     def set_value(self, value: Union[RadioGridValue, EmptyValue]):
-        # Maybe it's better to allow list of lists with lengths <= 1
+        # NOTE Maybe it's better to allow list of lists with lengths <= 1
         # grid.set_value([[val1], [], [val3], ...])
         # instead of grid.set_value([val1, Value.EMPTY, val3, ...])
         self._set_grid_values(value)
 
 
 class CheckboxGrid(Grid, MultiChoiceInput):
-    _cell_symbol = '□'
+    _cell_symbols = CHECKBOX_SYMBOLS
 
     def set_value(self, value: Union[CheckboxGridValue, EmptyValue]):
         self._set_grid_values(value)

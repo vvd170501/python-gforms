@@ -3,6 +3,8 @@ import re
 from enum import Enum
 
 SEP_WIDTH = 50
+RADIO_SYMBOLS = ('◯', '⦿')
+CHECKBOX_SYMBOLS = ('☐', '☒')
 
 
 # Pattern from form submision page

@@ -27,11 +27,10 @@ class Option:
         self.value = value
         self.other = other
 
-    def __str__(self):
-        return self.value
-
-    def to_str(self, indent=0):
+    def to_str(self, indent=0, with_value=None):
         if self.other:
+            if with_value is not None:
+                return f'Other: "{with_value}"'
             return 'Other'
         return self.value
 
@@ -50,9 +49,9 @@ class ActionOption(Option):
         self._action = action
         self.next_page = None
 
-    def to_str(self, indent=0):
+    def to_str(self, indent=0, with_value=None):
         from .elements import Page
-        s = super().to_str(indent)
+        s = super().to_str(indent, with_value)
         if self.next_page is Page.SUBMIT:
             return f'{s} -> Submit'
         if self.next_page is None:

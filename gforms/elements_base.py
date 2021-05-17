@@ -125,20 +125,16 @@ class InputElement(Element, ABC):
             self._validate_entry(i)
 
     def to_str(self, indent=0, include_answer=False):
-        parts = [self._type_str()]
-        if self.required:
-            parts.append('*')
-        if self.name:
-            parts.append(f': {self.name}')
-        if self.description:
-            parts.append(f'\n{self.description}')
-        hints = self._hints(indent)
+        parts = self._header()
+        hints = self._hints(indent, include_answer)
         if hints:
             parts.append('\n')
             parts.append('\n'.join(hints))
         if include_answer:
-            parts.append('\n')
-            parts.append('\n'.join(self._answer()))
+            answer = self._answer()
+            if answer:
+                parts.append('\n')
+                parts.append('\n'.join(answer))
         return ''.join(parts)
 
     def payload(self) -> Dict[str, List[str]]:
@@ -164,7 +160,18 @@ class InputElement(Element, ABC):
 
         self._values = values  # type: ignore
 
-    def _hints(self, indent=0):
+    def _header(self) -> List[str]:
+        parts = [self._type_str()]
+        if self.required:
+            parts.append('*')
+        if self.name:
+            parts.append(f': {self.name}')
+        if self.description:
+            parts.append(f'\n{self.description}')
+        return parts
+
+
+    def _hints(self, indent=0, modify=False):
         """Input hints (options / values). Returned strings should be already indented"""
         return []
 
@@ -243,7 +250,7 @@ class ChoiceInput(InputElement, ABC):
         self._set_values(new_choices)
 
     @abstractmethod
-    def _hints(self, indent=0):
+    def _hints(self, indent=0, modify=False):
         raise NotImplementedError()
 
     def _find_option(self, value: ChoiceValue, i):
@@ -285,13 +292,24 @@ class MultiChoiceInput(ChoiceInput):
 
 
 class ChoiceInput1D(ChoiceInput, SingleInput):
+    _choice_symbols = ('·', '>')
+
     # checkboxes without "other"
     @property
     def options(self):
         return self._options[0]
 
-    def _hints(self, indent=0):
-        return [f'- {opt.to_str()}' for opt in self.options]
+    def _hints(self, indent=0, modify=False):
+        if modify:
+            return [
+                f'{self._choice_symbols[opt.value in self._value]} {opt.to_str()}'
+                for opt in self.options
+            ]
+        else:
+            return [f'{self._choice_symbols[0]} {opt.to_str()}' for opt in self.options]
+
+    def _answer(self):
+        return []
 
 
 class OtherChoiceInput(ChoiceInput1D):
@@ -363,23 +381,21 @@ class OtherChoiceInput(ChoiceInput1D):
             if not self._other_value:
                 raise EmptyOther(self)
 
-    def _hints(self, indent=0):
-        hints = super()._hints(indent)
+    def _hints(self, indent=0, modify=False):
+        hints = super()._hints(indent, modify)
         if self.other_option is not None:
-            hints.append(f'- {self.other_option.to_str()}')
+            if modify and self._other_value is not None:
+                hints.append(
+                    f'{self._choice_symbols[1]}' \
+                    f' {self.other_option.to_str(with_value=self._other_value)}'
+                )
+            else:
+                hints.append(f'{self._choice_symbols[0]} {self.other_option.to_str()}')
         return hints
-
-    def _entry_answer(self, i) -> str:  # i == 0
-        if self._other_value is None:
-            return super()._entry_answer(i)
-        val = f'"{self._other_value}"'
-        if self._value:
-            val = '{super()._entry_answer(i)}, {val}'
-        return val
 
 
 class Grid(ChoiceInput):
-    _cell_symbol = '?'
+    _cell_symbols = ('?', '+')
 
     class Index(InputElement.Index):
         VALIDATOR = 8
@@ -413,18 +429,32 @@ class Grid(ChoiceInput):
     def is_misconfigured(self):
         return self.required and len(self.cols) < len(self.rows)
 
-    def _hints(self, indent=0):
+    def _hints(self, indent=0, modify=False):
         # NOTE row/column names may need wrapping
         res = []
         if self.validator is not None:
             res.append(self.validator.to_str())
-        tab = '  '
         max_length = max(len(row) for row in self.rows)
-        cells = ' '.join(f'{self._cell_symbol:^{len(col.value)}}' for col in self.cols)
-        res += [tab + ' ' * (max_length + 1) + '|'.join([str(opt) for opt in self.options])]
-        res += [tab + f'{row:>{max_length}} ' + cells for row in self.rows]
+        header = ' ' * (max_length + 1) + '|'.join([opt.value for opt in self.options])
+        row_fmt = f'{{:>{max_length}}} ' + \
+                  ' '.join(f'{{:^{len(col.value)}}}' for col in self.cols)
 
+        if not modify:
+            cells = [[self._cell_symbols[0]] * len(self.options)] * len(self.rows)
+        else:
+            cells = [None] * len(self.rows)
+            for i, row_choices in enumerate(self._values):
+                cells [i] = [
+                    self._cell_symbols[opt.value in row_choices]
+                    for opt in self.options
+                ]
+
+        res.append(header)
+        res += [row_fmt.format(row, *row_cells) for row, row_cells in zip(self.rows, cells)]
         return res
+
+    def _answer(self):
+        return []
 
     def _set_grid_values(self, values: Union[GridValue, EmptyValue]):
         if values is Value.EMPTY:
@@ -580,7 +610,7 @@ class TextInput(SingleInput):
         if self.validator is not None and self._values[index]:
             self.validator.validate(self._values[index][0])
 
-    def _hints(self, indent=0):
+    def _hints(self, indent=0, modify=False):
         if self.validator is not None:
             return [self.validator.to_str()]
         return []
@@ -593,6 +623,7 @@ class ActionChoiceInput(ChoiceInput1D):
         self.next_page = None
 
     def set_value(self, value: Union[ChoiceValue, EmptyValue]):
+        print(value)
         return self._set_choices([self._to_choice_list(value)])
 
     def _set_choices(self, choices: List[Union[List[ChoiceValue], EmptyValue]]):

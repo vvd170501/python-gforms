@@ -82,11 +82,10 @@ class Form:
                 value: CallbackRetVal = Value.EMPTY
                 if callback is not None:
                     value = callback(elem, page.index, elem_index)
-                    if value is None:  # just in case (if callback doesn't return anything)
-                        value = Value.DEFAULT
+                    if value is None:  # missing return statement in the callback
+                        raise ValueError('Callback returned an invalid value (None)')
 
-                if value is Value.DEFAULT or \
-                        elem.required or fill_optional:  # value is Not DEFAULT -> callback is None
+                if callback is None and (elem.required or fill_optional) or value is Value.DEFAULT:
                     value = default_callback(elem, page.index, elem_index)
                 elem.set_value(value)
                 elem.validate()
