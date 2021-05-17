@@ -76,6 +76,7 @@ class Form:
         page = self.pages[0]
         pages_to_submit = {page}
         while page is not None:
+            # use real element index or it would be better to count only input elements?
             for elem_index, elem in enumerate(page.elements):
                 if not isinstance(elem, InputElement):
                     continue
