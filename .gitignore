@@ -2,6 +2,8 @@
 /env
 /venv
 /cov_*
+/build
+/dist
 
 __pycache__
 *.egg-info
