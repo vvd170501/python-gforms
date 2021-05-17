@@ -220,7 +220,7 @@ class Scale(ChoiceInput1D):
     @classmethod
     def _parse(cls, elem):
         res = super()._parse(elem)
-        low, high = cls._get_value(elem)[cls.Index.LABELS]
+        low, high = cls._get_entry(elem)[cls.Index.LABELS]
         res.update({
             'low': low,
             'high': high,

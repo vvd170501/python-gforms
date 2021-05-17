@@ -140,7 +140,11 @@ class InvalidDuration(InvalidValue):
                ' value should be positive and less than 73 hours'
 
 
-class UnknownValidator(UserWarning):
+class ValidatorWarning(UserWarning):
+    pass
+
+
+class UnknownValidator(ValidatorWarning):
     def __init__(self, cls, value):
         super().__init__()
         self.cls = cls
@@ -149,6 +153,19 @@ class UnknownValidator(UserWarning):
     def __str__(self):
         return f'Unknown validator type for {self.cls.__name__}: {repr(self.value)},' \
                ' this validator will allow any input'
+
+
+class InvalidArguments(ValidatorWarning):
+    def __init__(self, val_type, subtype, args):
+        super().__init__()
+        self.val_type = val_type
+        self.subtype = subtype
+        self.args = args
+
+    def __str__(self):
+        return 'Cannot convert arguments for a validator.' \
+              f' Type: {self.val_type} ({self.subtype}), Arguments: {repr(self.args)}.' \
+               ' Validator is disabled'
 
 
 class SameColumn(InvalidValue):

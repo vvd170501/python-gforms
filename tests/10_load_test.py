@@ -12,7 +12,7 @@ from gforms.elements import Date, DateTime, Time, Duration
 
 from gforms.errors import ClosedForm, ParseError
 from gforms.options import ActionOption
-from gforms.validators import GridValidator
+from gforms.validators import GridValidator, TextValidator
 
 from .conftest import BaseFormTest
 
@@ -72,6 +72,7 @@ class ElementTest(BaseFormTest):
     def first_page(self, pages):
         return pages[0]
 
+    @pytest.mark.required  # if we cannot parse some elements, most probably other tests will fail
     def test_elements(self, pages):
         types = [[type(elem) for elem in elements] for elements in pages]
         assert types == self.expected
@@ -286,11 +287,64 @@ class TestTime(ElementTest):
 
 class TestTextValidators(ElementTest):
     form_type = 'text_validation'
-    expected = [[Short] * 21, [Paragraph] * 6]
 
-    @pytest.mark.skip
-    def test_validators(self, pages):
-        assert 0  # TODO
+    expected = [[Short] * 21, [Paragraph] * 6]
+    expected_types = [
+        ['NUMBER'] * 11 + ['TEXT'] * 4 + ['LENGTH'] * 2 + ['REGEX'] * 4,
+        ['LENGTH'] * 2 + ['REGEX'] * 4,
+    ]
+    expected_subtypes = [
+        [
+            'GT', 'GT', 'GE', 'LT', 'LE', 'EQ', 'NE', 'RANGE', 'NOT_RANGE', 'IS_NUMBER', 'IS_INT',
+            'CONTAINS', 'NOT_CONTAINS', 'EMAIL', 'URL',
+            'MAX_LENGTH', 'MIN_LENGTH',
+            'CONTAINS', 'NOT_CONTAINS', 'MATCHES', 'NOT_MATCHES'
+        ],
+        [
+            'MAX_LENGTH', 'MIN_LENGTH',
+            'CONTAINS', 'NOT_CONTAINS', 'MATCHES', 'NOT_MATCHES'
+        ],
+    ]
+
+    @pytest.mark.required
+    def test_validator_types(self, pages):
+        for page, type_list, subtype_list in zip(pages,
+                                                 self.expected_types,
+                                                 self.expected_subtypes):
+            for element, type_name, subtype_name in zip(page,
+                                                        type_list,
+                                                        subtype_list):
+                validator: TextValidator = element.validator
+                assert validator is not None
+                type_ = getattr(TextValidator.Type, type_name)
+                assert validator.type is type_
+                subtype = getattr(type_.subtype_class, subtype_name)
+                assert validator.subtype is subtype
+
+    def test_error_msg(self, first_page):
+        assert first_page[0].validator.error_msg == 'Error_text'
+
+    def test_number_args(self, first_page):
+        for elem in first_page[:7]:  # comparisons
+            assert elem.validator.args == ['123']
+        for elem in first_page[7:9]:  # ranges
+            assert elem.validator.args == ['123', '456']
+        for elem in first_page[9:11]:  # bool
+            assert elem.validator.args is None
+
+    def test_text_args(self, first_page):
+        for elem in first_page[11:13]:  # should (not) contain a string
+            assert elem.validator.args == ['qwe']
+        for elem in first_page[13:15]:  # bool
+            assert elem.validator.args is None
+
+    def test_length_args(self, first_page):  # paragraphs use the same format
+        for elem in first_page[15:17]:  # compare
+            assert elem.validator.args == ['123']
+
+    def test_regex_args(self, first_page):
+        for elem in first_page[17:]:  # pattern
+            assert elem.validator.args == ['qw.rt[a-z]']
 
 
 class TestGridValidators(ElementTest):

@@ -128,7 +128,8 @@ class InputElement(Element, ABC):
         parts = [self._type_str()]
         if self.required:
             parts.append('*')
-        parts.append(f': {self.name}')
+        if self.name:
+            parts.append(f': {self.name}')
         if self.description:
             parts.append(f'\n{self.description}')
         hints = self._hints(indent)
@@ -199,7 +200,7 @@ class SingleInput(InputElement):
         return f'{self._submit_id(self._entry_id)}_{name}'
 
     @staticmethod
-    def _get_value(elem):
+    def _get_entry(elem):
         return InputElement._get_entries(elem)[0]
 
 
@@ -463,7 +464,7 @@ class TimeElement(SingleInput):
 
     @staticmethod
     def parse_duration_flag(elem):
-        flags = TimeElement._get_value(elem)[TimeElement.Index.FLAGS]
+        flags = TimeElement._get_entry(elem)[TimeElement.Index.FLAGS]
         return bool(flags[TimeElement.Index.DURATION])
 
     def __init__(self, **kwargs):
@@ -503,13 +504,13 @@ class DateElement(SingleInput):
 
     @staticmethod
     def parse_time_flag(elem):
-        flags = DateElement._get_value(elem)[DateElement.Index.FLAGS]
+        flags = DateElement._get_entry(elem)[DateElement.Index.FLAGS]
         return bool(flags[DateElement.Index.TIME])
 
     @classmethod
     def _parse(cls, elem):
         res = super()._parse(elem)
-        flags = cls._get_value(elem)[cls.Index.FLAGS]
+        flags = cls._get_entry(elem)[cls.Index.FLAGS]
         res.update({
             'has_year': bool(flags[cls.Index.YEAR])
         })
@@ -549,13 +550,20 @@ class MediaElement(Element):
 
 
 class TextInput(SingleInput):
+    class Index(SingleInput.Index):
+        VALIDATOR = 4
+
     @classmethod
     def _parse(cls, elem):
-        return super()._parse(elem)
+        res = super()._parse(elem)
+        value = cls._get_entry(elem)
+        if len(value) > cls.Index.VALIDATOR:
+            res['validator'] = TextValidator.parse(value[cls.Index.VALIDATOR][0])
+        return res
 
     def __init__(self, *, validator=None, **kwargs):
         super().__init__(**kwargs)
-        self.validator: Optional[TextValidator] = validator  # TODO to_str
+        self.validator: Optional[TextValidator] = validator
 
     def set_value(self, value: Union[TextValue, EmptyValue]):
         if isinstance(value, str):
@@ -571,6 +579,11 @@ class TextInput(SingleInput):
         super()._validate_entry(index)
         if self.validator is not None and self._values[index]:
             self.validator.validate(self._values[index][0])
+
+    def _hints(self, indent=0):
+        if self.validator is not None:
+            return [self.validator.to_str()]
+        return []
 
 
 class ActionChoiceInput(ChoiceInput1D):

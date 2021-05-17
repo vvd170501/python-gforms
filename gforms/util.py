@@ -1,7 +1,37 @@
 import random
-
+import re
+from enum import Enum
 
 SEP_WIDTH = 50
+
+
+# Pattern from form submision page
+EMAIL_REGEX = re.compile(
+    r"^[+a-zA-Z0-9_.!#$%&'*\/=?^`{|}~-]+@([a-zA-Z0-9-]+\.)+[a-zA-Z0-9]{2,63}$"
+)
+
+# From https://gist.github.com/dperini/729294
+URL_REGEX = re.compile(
+    r'^(?:(?:(?:https?|ftp):)?\/\/)(?:\S+(?::\S*)?@)?(?:(?!(?:10|127)(?:\.\d{1,3}){3})(?!('
+    r'?:169\.254|192\.168)(?:\.\d{1,3}){2})(?!172\.(?:1[6-9]|2\d|3[0-1])(?:\.\d{1,3}){2})(?:['
+    r'1-9]\d?|1\d\d|2[01]\d|22[0-3])(?:\.(?:1?\d{1,2}|2[0-4]\d|25[0-5])){2}(?:\.(?:['
+    r'1-9]\d?|1\d\d|2[0-4]\d|25[0-4]))|(?:(?:[a-z0-9\u00a1-\uffff][a-z0-9\u00a1-\uffff_-]{0,'
+    r'62})?[a-z0-9\u00a1-\uffff]\.)+(?:[a-z\u00a1-\uffff]{2,}\.?))(?::\d{2,5})?(?:[/?#]\S*)?$ '
+)
+
+
+class DefaultEnum(Enum):
+    @classmethod
+    def _missing_(cls, value):
+        return cls.__members__['UNKNOWN']  # is it possible to add a member when creating a class?
+
+
+class ArgEnum(Enum):
+    def __new__(cls, value, arg):
+        obj = object.__new__(cls)
+        obj._value_ = value
+        obj.arg = arg
+        return obj
 
 
 def page_separator(indent):
