@@ -445,6 +445,12 @@ class TestRadioGrid(GridTest):
             element.validate()
         assert exc_info.type == SameColumn
 
+    def test_validator_ok(self, wide_grid, element, with_validator):
+        element.set_value([element.options[i] for i in range(len(element.rows))])
+        with pytest.raises(SameColumn) as exc_info:
+            element.validate()
+        assert exc_info.type == SameColumn
+
 
 class TestCheckboxGrid(GridTest):
     elem_type = CheckboxGrid

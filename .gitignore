@@ -1,6 +1,7 @@
 /.*
 /env
 /venv
+/cov_*
 
 __pycache__
 *.egg-info

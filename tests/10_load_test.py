@@ -1,3 +1,4 @@
+import re
 from typing import List, Type
 
 import pytest
@@ -326,9 +327,9 @@ class TestTextValidators(ElementTest):
 
     def test_number_args(self, first_page):
         for elem in first_page[:7]:  # comparisons
-            assert elem.validator.args == ['123']
+            assert elem.validator.args == [123]
         for elem in first_page[7:9]:  # ranges
-            assert elem.validator.args == ['123', '456']
+            assert elem.validator.args == [123, 456]
         for elem in first_page[9:11]:  # bool
             assert elem.validator.args is None
 
@@ -340,11 +341,13 @@ class TestTextValidators(ElementTest):
 
     def test_length_args(self, first_page):  # paragraphs use the same format
         for elem in first_page[15:17]:  # compare
-            assert elem.validator.args == ['123']
+            assert elem.validator.args == [123]
 
     def test_regex_args(self, first_page):
         for elem in first_page[17:]:  # pattern
-            assert elem.validator.args == ['qw.rt[a-z]']
+            assert len(elem.validator.args) == 1
+            assert isinstance(elem.validator.args[0], re.Pattern)
+            assert elem.validator.args[0].pattern == 'qw.rt[a-z]'
 
 
 class TestGridValidators(ElementTest):
