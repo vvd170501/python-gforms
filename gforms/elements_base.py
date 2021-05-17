@@ -623,7 +623,6 @@ class ActionChoiceInput(ChoiceInput1D):
         self.next_page = None
 
     def set_value(self, value: Union[ChoiceValue, EmptyValue]):
-        print(value)
         return self._set_choices([self._to_choice_list(value)])
 
     def _set_choices(self, choices: List[Union[List[ChoiceValue], EmptyValue]]):
