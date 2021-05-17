@@ -4,7 +4,7 @@ from gforms import __version__
 
 setup(
     name='gforms',
-    description='Google Forms wrapper',
+    description='Google Forms wrapper for Python',
     version=__version__,
     packages=find_packages(),
     install_requires=[
