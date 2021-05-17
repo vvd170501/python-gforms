@@ -54,6 +54,11 @@ class RegexTypes(_Subtype):
     MATCHES = (301, (1, 'Must match regex "{}"'))
     NOT_MATCHES = (302, (1, 'Must not match regex "{}"'))
 
+    def descr(self, args):
+        if args is None:
+            return self.arg[1]
+        return self.arg[1].format(*(arg.pattern for arg in args))
+
 
 Subtype = Union[NumberTypes, TextTypes, LengthTypes, RegexTypes]
 
@@ -155,7 +160,11 @@ class TextValidator:
                 return args, False
         if type_ is cls.Type.NUMBER:
             try:
-                return [float(arg) for arg in args], True
+                args = [float(arg) for arg in args]
+                for i in range(len(args)):
+                    if args[i].is_integer():
+                        args[i] = int(args[i])
+                return args, True
             except ValueError:
                 return args, False
         if type_ is cls.Type.REGEX:
@@ -165,7 +174,7 @@ class TextValidator:
                 return args, False
 
     def _descr(self):
-        s = self.subtype.descr(*self.args)
+        s = self.subtype.descr(self.args)
         if self.type is self.Type.LENGTH:
             return s
         return 'Allowed values: ' + s

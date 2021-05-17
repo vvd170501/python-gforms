@@ -6,6 +6,12 @@ A python wrapper for public Google Forms.
 
 **Forms with required sign-in are not supported**
 
+## Installation
+
+```shell
+python3 -m pip install gforms
+```
+
 ## Features
 
 - Parse a form

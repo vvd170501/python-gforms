@@ -2,7 +2,7 @@ import random
 import re
 from enum import Enum
 
-SEP_WIDTH = 50
+SEP_WIDTH = 60  # implement dynamic width?
 RADIO_SYMBOLS = ('◯', '⦿')
 CHECKBOX_SYMBOLS = ('☐', '☒')
 
