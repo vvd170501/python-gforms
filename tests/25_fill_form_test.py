@@ -51,3 +51,8 @@ class TestFill(BaseFormTest):
     def test_callback_missing_return(self, form):
         with pytest.raises(ValueError, match=r'missing.+return statement'):
             form.fill(lambda e, i, j: None)
+
+    def test_to_str_filled(self, form):
+        # NOTE These tests only assert that to_str doesn't fail. The return value is not checked
+        form.fill(self.custom_callback)
+        _ = form.to_str(include_answer=True)

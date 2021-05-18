@@ -169,3 +169,7 @@ class BaseFormTest(Skippable, ABC):
             return load_form(link)
         else:
             return load_dump(self.form_type)
+
+    def test_to_str(self, form):
+        # NOTE These tests only assert that to_str doesn't fail. The return value is not checked
+        _ = form.to_str()
