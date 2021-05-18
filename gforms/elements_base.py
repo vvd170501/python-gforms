@@ -170,7 +170,6 @@ class InputElement(Element, ABC):
             parts.append(f'\n{self.description}')
         return parts
 
-
     def _hints(self, indent=0, modify=False):
         """Input hints (options / values). Returned strings should be already indented"""
         return []
@@ -444,7 +443,7 @@ class Grid(ChoiceInput):
         else:
             cells = [None] * len(self.rows)
             for i, row_choices in enumerate(self._values):
-                cells [i] = [
+                cells[i] = [
                     self._cell_symbols[opt.value in row_choices]
                     for opt in self.options
                 ]

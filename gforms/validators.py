@@ -125,7 +125,10 @@ class TextValidator:
         if self.type is self.Type.REGEX:
             is_ok = self._validate_regex(value)
         if not is_ok:
-            raise InvalidText(elem, value, details=self._descr())
+            descr = self._descr()
+            if self.error_msg:
+                descr = f'{self.error_msg} ({descr})'
+            raise InvalidText(elem, value, details=descr)
 
     def to_str(self):
         if self.has_unknown_type():

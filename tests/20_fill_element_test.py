@@ -148,10 +148,6 @@ class TextTest(SingleEntryTest):
         value = 'Qwe'
         self.check_value(element, value, [value])
 
-    @pytest.mark.skip
-    def test_validator(self):
-        assert 0  # TODO
-
 
 class TestShort(TextTest):
     elem_type = Short
