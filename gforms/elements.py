@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import random
 from datetime import date, datetime, time, timedelta
-from typing import List, Union, Optional
+from typing import List, Union, Optional, Dict, Tuple
 
 from .elements_base import Action, Value, MultiChoiceInput
 from .elements_base import Element, MediaElement, InputElement, \
@@ -124,6 +124,20 @@ class Page(Element):
                 for elem in self.elements
             ]
         )
+
+    def payload(self) -> Dict[str, List[str]]:
+        payload = {}
+        for elem in self.elements:
+            if isinstance(elem, InputElement):
+                payload.update(elem.payload())
+        return payload
+
+    def draft(self) -> List[Tuple]:
+        result = []
+        for elem in self.elements:
+            if isinstance(elem, InputElement):
+                result += elem.draft()
+        return result
 
     def resolve_actions(self, next_page: Page, mapping):
         for elem in self.elements:
@@ -349,7 +363,7 @@ class DateTime(DateElement):
         self._date = date_
         self._time = time_
 
-    def payload(self):
+    def payload(self) -> Dict[str, List[str]]:
         if self._date is None:
             return {}
         payload = super().payload()
@@ -358,6 +372,14 @@ class DateTime(DateElement):
             self._part_id("minute"): self._time.minute,
         })
         return payload
+
+    def draft(self) -> List[Tuple]:
+        if self._date is None:
+            return []
+        result = super().draft()
+        date_str = result[0][2][0]  # add DraftIndex class?
+        result[0][2][0] = date_str + f' {self._time.strftime("%H:%M")}'
+        return result
 
     def validate(self):
         super().validate()

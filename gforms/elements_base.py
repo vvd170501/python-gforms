@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 from enum import Enum, auto
-from typing import Dict, List, Literal, Union, cast, Any, Optional
+from typing import Dict, List, Literal, Union, cast, Any, Optional, Tuple
 
 from .validators import GridValidator, TextValidator
 from .errors import DuplicateOther, EmptyOther, InvalidChoice, \
@@ -143,6 +143,18 @@ class InputElement(Element, ABC):
             if value:
                 payload[self._submit_id(entry_id)] = value[:]
         return payload
+
+    def draft(self) -> List[Tuple]:
+        result = []
+        for entry_id, value in zip(self._entry_ids, self._values):
+            if value:
+                result.append((
+                    None,  # ???
+                    entry_id,
+                    value[:],
+                    0  # Last choice is "Other" (for "Individual responses" tab)
+                ))
+        return result
 
     @staticmethod
     def _submit_id(entry_id):
@@ -334,16 +346,30 @@ class OtherChoiceInput(ChoiceInput1D):
         self.other_option = other_option
         self._other_value: Union[str, None] = None
 
-    def payload(self):
-        if not self._other_value:  # '' != None (see _validate_entry)
-            return super().payload()
-
+    def payload(self) -> Dict[str, List[str]]:
         payload = super().payload()
+        # '' is not converted to None (see _validate_entry), so "... not None" isn't applicable
+        if not self._other_value:
+            return payload
+
         main_key = self._submit_id(self._entry_id)
         other_key = main_key + '.other_option_response'
         payload.setdefault(main_key, []).append('__other_option__')
         payload[other_key] = [self._other_value]
         return payload
+
+    def draft(self) -> List[Tuple]:
+        result = super().draft()
+        if not self._other_value:
+            return result
+
+        if not result:
+            result.append((None, self._entry_id, [self._other_value], 1))
+            return result
+        *data, answers, _ = result[0]
+        answers.append(self._other_value)
+        result[0] = (*data, answers, 1)
+        return result
 
     def _set_choices(self, choices: List[Union[List[ChoiceValue], EmptyValue]]):
         self._other_value = None
@@ -506,7 +532,7 @@ class TimeElement(SingleInput):
         if self.required and self._is_empty():
             raise RequiredElement(self)
 
-    def payload(self):
+    def payload(self) -> Dict[str, List[str]]:
         payload = {}
         if self._hour is not None:
             payload[self._part_id('hour')] = self._hour
@@ -515,6 +541,15 @@ class TimeElement(SingleInput):
         if self._second is not None:
             payload[self._part_id('second')] = self._second
         return payload
+
+    def draft(self) -> List[Tuple]:
+        hms = []
+        for val in [self._hour, self._minute, self._second]:
+            if val is not None:
+                hms.append(f'{val:02}')
+        # will return an empty string for an empty element.
+        # The server sets the same draft value, so it's ok
+        return [(None, self._entry_id, [':'.join(hms)], 0)]
 
     def _set_time(self, hour, minute, second):
         self._hour = hour
@@ -554,7 +589,7 @@ class DateElement(SingleInput):
         if self.required and self._date is None:
             raise RequiredElement(self)
 
-    def payload(self):
+    def payload(self) -> Dict[str, List[str]]:
         if self._date is None:
             return {}
         payload = {
@@ -564,6 +599,12 @@ class DateElement(SingleInput):
         if self.has_year:
             payload[self._part_id("year")] = self._date.year
         return payload
+
+    def draft(self) -> List[Tuple]:
+        if self._date is None:
+            return []
+        fmt = '%Y-%m-%d' if self.has_year else '%m-%d'
+        return [(None, self._entry_id, [self._date.strftime(fmt)], 0)]
 
     def _answer(self) -> List[str]:
         if self._date is None:

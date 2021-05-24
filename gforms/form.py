@@ -1,6 +1,6 @@
 import json
 import re
-from typing import Callable, Optional
+from typing import Callable, Optional, List
 
 import requests
 from bs4 import BeautifulSoup
@@ -34,8 +34,10 @@ class Form:
         self.description = None
         self.pages = None
 
-    def load(self, http=requests, resend=False):
+    def load(self, http=None, resend=False):
         # does resend actually matter?
+        if http is None:
+            http = requests
         params = {'usp': 'form_confirm'} if resend else None
         page = http.get(self.url, params=params)
         soup = BeautifulSoup(page.text, 'html.parser')
@@ -96,32 +98,41 @@ class Form:
 
             page = page.next_page()
             if page in pages_to_submit:
+                # It is possible to create a form in which any choice will lead to an infinite loop.
+                # These cases are not detected (add a separate public method?)
                 raise InfiniteLoop(self)
             pages_to_submit.add(page)
 
-    def submit(self, http=requests):
+    def submit(self, http=None, emulate_history=False) -> List[requests.models.Response]:
+        # NOTE emulate_history option is experimental and may not always work as expected
+        # TODO check if form was filled
+        if http is None:
+            http = requests
+
+        if emulate_history:
+            last_page, history, draft = self._emulate_history()
+            return [self._submit_page(http, last_page, history, draft, False)]
 
         res = []
         page = self.pages[0]
         history = self._history
         draft = self._draft
 
-        # Compose pageHistory and draftResponse manually?
-        # In this case, 1-2 requests may be enough
         while page is not None:
             next_page = page.next_page()
             sub_result = self._submit_page(http, page, history, draft, next_page is not None)
-            page = next_page
             res.append(sub_result)
             if sub_result.status_code != 200:
                 raise RuntimeError('Invalid response code', res)
             soup = BeautifulSoup(sub_result.text, 'html.parser')
             history = self._get_history(soup)
             draft = self._get_draft(soup)
-            if page is None and history is None:
-                break
-            if page is None or history is None or page.index != int(history.rsplit(',', 1)[-1]):
-                raise RuntimeError('Incorrect next page', self, res, page)
+            if next_page is None and history is None:
+                break  # submitted successfully
+            if next_page is None or history is None or \
+                    next_page.index != int(history.rsplit(',', 1)[-1]):
+                raise RuntimeError('Incorrect next page', self, res, next_page)
+            page = next_page
         return res
 
     def _parse(self, data):
@@ -149,12 +160,30 @@ class Form:
         for (page, next_page) in zip(self.pages, self.pages[1:] + [None]):
             page.resolve_actions(next_page, mapping)
 
+    def _emulate_history(self):
+        last_page = self.pages[0]
+        history = self._history.split(',')  # ['0']
+        draft = json.loads(self._draft)  # [None, None, fbzx]
+        # draft[0] should be None or non-empty,
+        # but submission works with an empty value (on 25.05.21)
+
+        # For some unfilled elements, draft values should be [""],
+        # but if the corresponding entries are not included into the draft,
+        # the form is still accepted
+
+        while True:
+            next_page = last_page.next_page()
+            if next_page is None:
+                return last_page, ','.join(history), json.dumps(draft)
+            history.append(str(next_page.index))
+            if draft[0] is None:
+                draft[0] = last_page.draft()
+            else:
+                draft[0] += last_page.draft()
+            last_page = next_page
+
     def _submit_page(self, http, page, history, draft, continue_):
-        payload = {}
-        for elem in page.elements:
-            if not isinstance(elem, InputElement):
-                continue
-            payload.update(elem.payload())
+        payload = page.payload()
 
         payload['fbzx'] = self._fbzx
         if continue_:
@@ -186,7 +215,12 @@ class Form:
 
     @staticmethod
     def _raw_form(soup):
-        script = soup.find_all('script')[3].string
+        scripts = soup.find_all('script')
+        if len(scripts) < 4:
+            return None
         pattern = re.compile(r'FB_PUBLIC_LOAD_DATA_ = (\[.+\])\n;', re.S)
-        data = json.loads(pattern.search(script).group(1))
+        match = pattern.search(scripts[3].string)
+        if match is None:
+            return None
+        data = json.loads(match.group(1))
         return data
