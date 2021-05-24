@@ -2,6 +2,7 @@ import json
 import re
 from typing import Callable, Optional
 
+import requests
 from bs4 import BeautifulSoup
 
 from .elements_base import InputElement
@@ -33,7 +34,7 @@ class Form:
         self.description = None
         self.pages = None
 
-    def load(self, http, resend=False):
+    def load(self, http=requests, resend=False):
         # does resend actually matter?
         params = {'usp': 'form_confirm'} if resend else None
         page = http.get(self.url, params=params)
@@ -41,12 +42,13 @@ class Form:
         if page.url.endswith('closedform'):
             self.title = soup.find('title').text
             raise ClosedForm(self)
+
+        data = self._raw_form(soup)
         self._fbzx = self._get_fbzx(soup)
-        if self._fbzx is None:
-            raise ParseError(self)
         self._history = self._get_history(soup)
         self._draft = self._get_draft(soup)
-        data = self._raw_form(soup)
+        if data is None or any(value is None for value in [self._fbzx, self._history, self._draft]):
+            raise ParseError(self)
         self._parse(data)
 
     def to_str(self, indent=0, include_answer=False):
@@ -97,7 +99,7 @@ class Form:
                 raise InfiniteLoop(self)
             pages_to_submit.add(page)
 
-    def submit(self, http):
+    def submit(self, http=requests):
 
         res = []
         page = self.pages[0]
