@@ -385,7 +385,7 @@ class OtherChoiceInput(ChoiceInput1D):
         if self.other_option is not None:
             if modify and self._other_value is not None:
                 hints.append(
-                    f'{self._choice_symbols[1]}' \
+                    f'{self._choice_symbols[1]}'
                     f' {self.other_option.to_str(with_value=self._other_value)}'
                 )
             else:
@@ -607,7 +607,7 @@ class TextInput(SingleInput):
     def _validate_entry(self, index):  # index == 0
         super()._validate_entry(index)
         if self.validator is not None and self._values[index]:
-            self.validator.validate(self._values[index][0])
+            self.validator.validate(self, self._values[index][0])
 
     def _hints(self, indent=0, modify=False):
         if self.validator is not None:
