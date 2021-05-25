@@ -2,8 +2,10 @@ from datetime import timedelta, time, datetime, date
 
 import pytest
 
+from gforms import Form
 from gforms.elements_base import Grid
 from gforms.elements import DateTime, Duration, Date, Time
+from gforms.errors import FormNotLoaded, FormNotFilled
 
 from .conftest import BaseFormTest
 
@@ -56,3 +58,18 @@ class TestFill(BaseFormTest):
         # NOTE These tests only assert that to_str doesn't fail. The return value is not checked
         form.fill(self.custom_callback)
         _ = form.to_str(include_answer=True)
+
+
+class TestUninitialized:
+    def test_fill_not_loaded(self):
+        form = Form('...')
+        with pytest.raises(FormNotLoaded):
+            form.fill()
+
+    def test_submit_not_filled(self):
+        form = Form('...')
+        with pytest.raises(FormNotFilled):
+            form.submit()
+
+
+# TODO add submit() tests

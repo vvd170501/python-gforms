@@ -122,6 +122,7 @@ def load_dump(form_type):
     form._history = '0'
     data = getattr(form_dumps, form_type)
     form._parse(data)
+    form._is_loaded = True
     return form
 
 

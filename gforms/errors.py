@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 
 
-class FormError(Exception, ABC):
+class FormsError(Exception, ABC):
     """Base error class"""
 
     def __init__(self, *args, details=None, **kwargs):
@@ -19,11 +19,13 @@ class FormError(Exception, ABC):
         return message
 
 
-class ParseError(FormError):
+class FormError(FormsError):
     def __init__(self, form, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.form = form
 
+
+class ParseError(FormError):
     def _message(self):
         return f'Cannot parse form with URL {self.form.url}'
 
@@ -33,14 +35,24 @@ class ClosedForm(ParseError):
         return f'Form "{self.form.title}" is closed'
 
 
-class ElementError(FormError):
+class FormNotLoaded(FormError):
+    def _message(self):
+        return f'Form with URL "{self.form.url}" was not loaded'
+
+
+class FormNotFilled(FormError):
+    def _message(self):
+        return f'Form "{self.form.title}" was not filled'
+
+
+class ElementError(FormsError):
     def __init__(self, elem, *args, index=0, **kwargs):
         super().__init__(*args, **kwargs)
         self.elem = elem
         self.index = index
 
 
-class InfiniteLoop(FormError, ValueError):
+class InfiniteLoop(FormsError, ValueError):
     def __init__(self, form):
         super().__init__(form)
 
@@ -54,7 +66,7 @@ class RowError(ElementError):
         return self.elem.rows[self.index]
 
 
-class ValidationError(FormError, ValueError):
+class ValidationError(FormsError, ValueError):
     pass
 
 

@@ -8,7 +8,7 @@ from bs4 import BeautifulSoup
 from .elements_base import InputElement
 from .elements import Action, Element, Page, Value, parse as parse_element
 from .elements import CallbackRetVal, default_callback
-from .errors import ClosedForm, InfiniteLoop, ParseError
+from .errors import ClosedForm, InfiniteLoop, ParseError, FormNotLoaded, FormNotFilled
 from .util import add_indent, page_separator
 
 
@@ -33,11 +33,18 @@ class Form:
         self.title = None
         self.description = None
         self.pages = None
+        self._is_loaded = False
+        self._is_filled = False
 
     def load(self, http=None, resend=False):
         # does resend actually matter?
         if http is None:
             http = requests
+
+        # load() may fail, in this case form data will be inconsistent
+        self._is_loaded = False
+        self._is_filled = False
+
         params = {'usp': 'form_confirm'} if resend else None
         page = http.get(self.url, params=params)
         soup = BeautifulSoup(page.text, 'html.parser')
@@ -52,8 +59,12 @@ class Form:
         if data is None or any(value is None for value in [self._fbzx, self._history, self._draft]):
             raise ParseError(self)
         self._parse(data)
+        self._is_loaded = True
 
     def to_str(self, indent=0, include_answer=False):
+        if not self._is_filled:
+            include_answer = False
+
         if self.description:
             title = f'{self.title}\n{self.description}'
         else:
@@ -77,6 +88,11 @@ class Form:
         """
         fill_optional: fill optional elements if callback returned Value.DEFAULT
         """
+
+        if not self._is_loaded:
+            raise FormNotLoaded(self)
+        self._is_filled = False
+
         page = self.pages[0]
         pages_to_submit = {page}
         while page is not None:
@@ -102,10 +118,13 @@ class Form:
                 # These cases are not detected (add a separate public method?)
                 raise InfiniteLoop(self)
             pages_to_submit.add(page)
+        self._is_filled = True
 
     def submit(self, http=None, emulate_history=False) -> List[requests.models.Response]:
         # NOTE emulate_history option is experimental and may not always work as expected
-        # TODO check if form was filled
+        if not self._is_filled:
+            raise FormNotFilled(self)
+
         if http is None:
             http = requests
 

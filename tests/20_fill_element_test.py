@@ -60,6 +60,8 @@ class ElementTest(ABC):
         # In all other cases, use this method
         element.set_value(value)
         element.validate()
+        # NOTE draft() value is never checked (add tests later?)
+        _ = element.draft()
         return element.payload()
 
     @classmethod
@@ -613,6 +615,7 @@ class TestTransitions:
         form = Form('')
         form.pages = pages
         form._resolve_actions()
+        form._is_loaded = True
         return form
 
     def test_single_element(self, form):
