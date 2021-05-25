@@ -71,7 +71,7 @@ class Form:
 
         page = http.get(self.url)
         soup = BeautifulSoup(page.text, 'html.parser')
-        if page.url.endswith('closedform'):
+        if self._is_closed(page):
             self.title = soup.find('title').text
             raise ClosedForm(self)
 
@@ -196,6 +196,7 @@ class Form:
             requests.exceptions.RequestException: A request failed.
             RuntimeError: The predicted next page differs from the real one
                 or a http(s) response with an incorrect code was received.
+            gforms.errors.ClosedForm: The form is closed.
         """
         if not self._is_filled:
             raise FormNotFilled(self)
@@ -286,7 +287,14 @@ class Form:
         payload['draftResponse'] = draft
 
         url = re.sub(r'(.+)viewform.*', r'\1formResponse', self.url)
-        return http.post(url, data=payload)
+        page = http.post(url, data=payload)
+        if self._is_closed(page):
+            raise ClosedForm(self)
+        return page
+
+    @staticmethod
+    def _is_closed(page):
+        return page.url.endswith('closedform')
 
     @staticmethod
     def _get_input(soup, name):
