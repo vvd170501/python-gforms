@@ -53,12 +53,12 @@ class TestPages(BaseFormTest):
 
     def test_transitions(self, form):
         pages = form.pages
-        assert pages[0].next_page() == pages[1]  # default next page (Action.NEXT)
-        assert pages[1].next_page() == pages[0]  # first page (Action.FIRST)
+        assert pages[0].next_page() == pages[1]  # default next page (_Action.NEXT)
+        assert pages[1].next_page() == pages[0]  # first page (_Action.FIRST)
         assert pages[2].next_page() == pages[1]  # page id (go backwards)
         assert pages[3].next_page() == pages[3]  # page id (loop)
         assert pages[4].next_page() == pages[5]  # page id (go forward)
-        assert pages[5].next_page() is None  # Action.SUBMIT
+        assert pages[5].next_page() is None  # _Action.SUBMIT
         assert pages[6].next_page() is None  # last page
 
 
@@ -189,7 +189,7 @@ class TestRadio(ActChoiceElementTest):
         opt1, opt2, opt3 = with_other_and_actions.options
         other = with_other_and_actions.other_option
         assert opt1.next_page == form.pages[1]  # default next page
-        assert opt2.next_page == form.pages[0]  # Action.FIRST
+        assert opt2.next_page == form.pages[0]  # _Action.FIRST
         assert opt3.next_page == form.pages[1]  # page id (next)
         assert other.next_page == Page.SUBMIT
 
@@ -217,7 +217,7 @@ class TestDropdown(ActChoiceElementTest):
 
         opt1, opt2, opt3, opt4 = with_actions.options
         assert opt1.next_page == form.pages[1]  # default next page
-        assert opt2.next_page == form.pages[0]  # Action.FIRST
+        assert opt2.next_page == form.pages[0]  # _Action.FIRST
         assert opt3.next_page == form.pages[1]  # page id
         assert opt4.next_page == Page.SUBMIT
 

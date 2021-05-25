@@ -5,7 +5,7 @@ from typing import Type, List
 import pytest
 
 from gforms import Form
-from gforms.elements_base import Action, Element, InputElement, ChoiceInput, ActionChoiceInput, \
+from gforms.elements_base import _Action, Element, InputElement, ChoiceInput, ActionChoiceInput, \
                                  Grid, DateElement, TextInput
 from gforms.elements import Value, CheckboxGridValue
 from gforms.elements import Short, Paragraph
@@ -263,7 +263,7 @@ class ActionChoiceTest(ChoiceTest1D):
 
     @staticmethod
     def _action_option(value, next_page, other=False):
-        opt = ActionOption(value=value, other=other, action=Action.NEXT)
+        opt = ActionOption(value=value, other=other, action=_Action.NEXT)
         opt.next_page = next_page
         return opt
 
@@ -579,7 +579,7 @@ class TestTransitions:
     def _page(id_):
         return Page(id_=id_,
                     name='Test page', description=None, type_=Element.Type.PAGE,
-                    prev_action=Action.NEXT)
+                    prev_action=_Action.NEXT)
 
     @staticmethod
     def _dropdown(id_, entry_id, options):
@@ -605,9 +605,9 @@ class TestTransitions:
         for page in pages:
             for i in range(2):
                 options = [
-                    ActionOption(value=f'First', other=False, action=Action.FIRST),
+                    ActionOption(value=f'First', other=False, action=_Action.FIRST),
                     ActionOption(value=f'Second', other=False, action=pages[1].id),
-                    ActionOption(value=f'Submit', other=False, action=Action.SUBMIT),
+                    ActionOption(value=f'Submit', other=False, action=_Action.SUBMIT),
                 ]
                 page.append(TestTransitions._dropdown(id_=page.id + 100 * i,  # just unique ids
                                                       entry_id=page.id + 100 * i + 10,

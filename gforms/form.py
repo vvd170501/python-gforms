@@ -6,7 +6,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from .elements_base import InputElement
-from .elements import Action, Element, Page, Value, parse as parse_element
+from .elements import _Action, Element, Page, Value, parse as parse_element
 from .elements import CallbackRetVal, default_callback
 from .errors import ClosedForm, InfiniteLoop, ParseError, FormNotLoaded, FormNotFilled
 from .util import add_indent, page_separator
@@ -15,8 +15,21 @@ from .util import add_indent, page_separator
 # based on https://gist.github.com/gcampfield/cb56f05e71c60977ed9917de677f919c
 
 
+CallbackType = Callable[[InputElement, int, int], CallbackRetVal]
+
+
 class Form:
-    class Index:
+    """A Google Form wrapper.
+
+    Attributes:
+        url: URL of the form.
+        name: Name of the form (== document name, not shown on the submission page).
+        title: Title of the form.
+        description: Description of the form.
+        pages: List of form pages.
+    """
+
+    class _Index:
         FORM = 1
         DESCRIPTION = 0
         FIELDS = 1
@@ -36,8 +49,19 @@ class Form:
         self._is_loaded = False
         self._is_filled = False
 
-    def load(self, http=None, resend=False):
-        # does resend actually matter?
+    def load(self, http: Optional[requests.Session] = None):
+        """Loads and parses the form.
+
+        Args:
+            http: A session which is used to load the form.
+                By default, requests.get is used.
+
+        Raises:
+            requests.exceptions.RequestException: A request failed.
+            gforms.errors.ParseError: The form could not be parsed.
+            gforms.errors.ClosedForm: The form is closed.
+        """
+
         if http is None:
             http = requests
 
@@ -45,8 +69,7 @@ class Form:
         self._is_loaded = False
         self._is_filled = False
 
-        params = {'usp': 'form_confirm'} if resend else None
-        page = http.get(self.url, params=params)
+        page = http.get(self.url)
         soup = BeautifulSoup(page.text, 'html.parser')
         if page.url.endswith('closedform'):
             self.title = soup.find('title').text
@@ -62,6 +85,16 @@ class Form:
         self._is_loaded = True
 
     def to_str(self, indent=0, include_answer=False):
+        """Returns a text representation of the form.
+
+        Args:
+            indent: The indent for pages and elements.
+            include_answer: A boolean,
+                indicating if the output should contain the answers.
+
+        Returns:
+            A (multiline) string representation of this form.
+        """
         if not self._is_filled:
             include_answer = False
 
@@ -82,11 +115,36 @@ class Form:
 
     def fill(
                 self,
-                callback: Optional[Callable[[InputElement, int, int], CallbackRetVal]] = None,
+                callback: Optional[CallbackType] = None,
                 fill_optional=False
             ):
-        """
-        fill_optional: fill optional elements if callback returned Value.DEFAULT
+        """Fills the form using values returned by the callback.
+
+        If callback is None, the default callback (see below) is used.
+
+        For an example implementation of a callback,
+        see gforms.elements.default_callback.
+
+        For types and values accepted by an element, see its set_value method.
+
+        Args:
+            callback: The callback which returns values for elements.
+                If the callback returns gforms.elements.Value.DEFAULT
+                for an element, then the default callback
+                is used for this element.
+
+            fill_optional:
+                Whether or not optional elements should be filled
+                by the default callback.
+
+        Raises:
+            ValueError: The callback returned an invalid value.
+            gforms.errors.ElementError:
+                The callback returned an unexpected value for an element
+            gforms.errors.ValidationError: The form cannot be submitted later
+                if an element is filled with the callback return value
+            gforms.errors.InfiniteLoop: The chosen values cannot be submitted,
+                because the page transitions form an infinite loop.
         """
 
         if not self._is_loaded:
@@ -121,7 +179,24 @@ class Form:
         self._is_filled = True
 
     def submit(self, http=None, emulate_history=False) -> List[requests.models.Response]:
-        # NOTE emulate_history option is experimental and may not always work as expected
+        """Submits the form.
+
+        Args:
+            http: see Form.load
+            emulate_history: (Experimental)
+                Use only one request for submitting the form.
+                For single-page forms the behavior is unchanged.
+                For multi-page forms, the data from previous pages
+                (pageHistory and draftResponse) is created locally.
+                When using this option,
+                some values may be submitted incorrectly, since
+                the format of draftResponse is only partially known.
+
+        Raises:
+            requests.exceptions.RequestException: A request failed.
+            RuntimeError: The predicted next page differs from the real one
+                or a http(s) response with an incorrect code was received.
+        """
         if not self._is_filled:
             raise FormNotFilled(self)
 
@@ -155,18 +230,18 @@ class Form:
         return res
 
     def _parse(self, data):
-        self.name = data[self.Index.NAME]
-        form = data[self.Index.FORM]
-        self.title = form[self.Index.TITLE]
+        self.name = data[self._Index.NAME]
+        form = data[self._Index.FORM]
+        self.title = form[self._Index.TITLE]
         if not self.title:
             self.title = self.name
-        self.description = form[self.Index.DESCRIPTION]
+        self.description = form[self._Index.DESCRIPTION]
         self.pages = [Page.first()]
 
-        if form[self.Index.FIELDS] is None:
+        if form[self._Index.FIELDS] is None:
             return
-        for elem in form[self.Index.FIELDS]:
-            el_type = Element.Type(elem[Element.Index.TYPE])
+        for elem in form[self._Index.FIELDS]:
+            el_type = Element.Type(elem[Element._Index.TYPE])
             if el_type == Element.Type.PAGE:
                 self.pages.append(Page.parse(elem).with_index(len(self.pages)))
                 continue
@@ -175,9 +250,9 @@ class Form:
 
     def _resolve_actions(self):
         mapping = {page.id: page for page in self.pages}
-        mapping[Action.SUBMIT] = Page.SUBMIT
+        mapping[_Action.SUBMIT] = Page.SUBMIT
         for (page, next_page) in zip(self.pages, self.pages[1:] + [None]):
-            page.resolve_actions(next_page, mapping)
+            page._resolve_actions(next_page, mapping)
 
     def _emulate_history(self):
         last_page = self.pages[0]

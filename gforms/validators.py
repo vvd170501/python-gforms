@@ -64,7 +64,7 @@ Subtype = Union[NumberTypes, TextTypes, LengthTypes, RegexTypes]
 
 
 class TextValidator:
-    class Index:
+    class _Index:
         TYPE = 0
         SUBTYPE = 1
         ARGS_OR_MSG = 2
@@ -82,22 +82,22 @@ class TextValidator:
 
     @classmethod
     def parse(cls, val):
-        if len(val) <= cls.Index.SUBTYPE:
+        if len(val) <= cls._Index.SUBTYPE:
             return cls._unknown_validator(val)
-        type_ = cls.Type(val[cls.Index.TYPE])
+        type_ = cls.Type(val[cls._Index.TYPE])
         if type_ is cls.Type.UNKNOWN:
             return cls._unknown_validator(val)
         subtype_cls = type_.subtype_class
-        subtype = subtype_cls(val[cls.Index.SUBTYPE])
+        subtype = subtype_cls(val[cls._Index.SUBTYPE])
         if subtype is subtype_cls.UNKNOWN:
             return cls._unknown_validator(val, type_, subtype)
         argnum = subtype.argnum
-        msg_index = cls.Index.ARGS_OR_MSG
+        msg_index = cls._Index.ARGS_OR_MSG
         args = None
         msg = None
         if argnum > 0:
             msg_index += 1
-            args = val[cls.Index.ARGS_OR_MSG]
+            args = val[cls._Index.ARGS_OR_MSG]
         if len(val) > msg_index:
             msg = val[msg_index]
         args, valid_args = cls._parse_args(args, type_, subtype, argnum)
