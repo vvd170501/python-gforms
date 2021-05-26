@@ -7,16 +7,16 @@ from typing import List, Union, Optional, Dict, Tuple
 from .elements_base import _Action, Value, MultiChoiceInput
 from .elements_base import Element, MediaElement, InputElement, \
                            ActionChoiceInput, ChoiceInput, ChoiceInput1D, \
-                           OtherChoiceInput, TextInput, \
+                           OtherChoiceInput, ValidatedInput, TextInput, \
                            DateElement, Grid, TimeElement
 from .elements_base import ChoiceValue, EmptyValue, MultiChoiceValue, TextValue, \
                            GridChoiceValue, GridMultiChoiceValue
 
 from .errors import ElementTypeError, InvalidDuration, \
-    RequiredElement, InvalidText, MisconfiguredGrid, UnknownValidator
+    RequiredElement, InvalidText, MisconfiguredElement, UnknownValidator, InvalidArguments
 from .options import ActionOption
 from .util import RADIO_SYMBOLS, CHECKBOX_SYMBOLS, add_indent, elem_separator, random_subset
-from .validators import GridValidator
+from .validators import CheckboxValidator, CheckboxTypes
 
 
 __all__ = ['Element', '_Action', 'CallbackRetVal', 'Value',
@@ -101,7 +101,6 @@ class Page(Element):
 
     def next_page(self):
         """The next pge, based on user's choices."""
-
         if self._next_page is None:
             return None
 
@@ -113,7 +112,6 @@ class Page(Element):
 
     def to_str(self, indent=0, include_answer=False):
         """See base class."""
-
         title = f'Page {self.index + 1}:'
         if self.name:
             title = f'{title} {self.name}'
@@ -138,7 +136,6 @@ class Page(Element):
 
     def payload(self) -> Dict[str, List[str]]:
         """Returns a combined payload of all elements from this page."""
-
         payload = {}
         for elem in self.elements:
             if isinstance(elem, InputElement):
@@ -147,7 +144,6 @@ class Page(Element):
 
     def draft(self) -> List[Tuple]:
         """Returns a combined draftResponse."""
-
         result = []
         for elem in self.elements:
             if isinstance(elem, InputElement):
@@ -243,8 +239,18 @@ class Dropdown(ActionChoiceInput):
     pass
 
 
-class Checkboxes(OtherChoiceInput, MultiChoiceInput):
+class Checkboxes(ValidatedInput, OtherChoiceInput, MultiChoiceInput):
     _choice_symbols = CHECKBOX_SYMBOLS
+
+    class _Index(ChoiceInput._Index):
+        VALIDATOR = 4
+
+    @classmethod
+    def _parse_validator(cls, elem) -> Optional[CheckboxValidator]:
+        value = cls._get_entry(elem)
+        if len(value) > cls._Index.VALIDATOR:
+            return CheckboxValidator.parse(value[cls._Index.VALIDATOR][0])
+        return None
 
     def set_value(self, value: Union[CheckboxesValue, EmptyValue]):
         """Sets the value for this element.
@@ -259,8 +265,20 @@ class Checkboxes(OtherChoiceInput, MultiChoiceInput):
             gforms.errors.ElementTypeError:
                 The argument's type is not accepted by this element.
         """
-
         return self._set_choices([self._to_choice_list(value)])
+
+    def _is_misconfigured(self):
+        cnt = len(self.options)
+        if self.other_option is not None:
+            cnt += 1
+        required = self.validator.args[0]
+        if self.validator.subtype is CheckboxTypes.AT_LEAST and cnt < required:
+            return True
+        if self.validator.subtype is CheckboxTypes.AT_MOST and cnt < required:
+            return True
+        if self.validator.subtype is CheckboxTypes.AT_LEAST and cnt < required:
+            return True
+        return False
 
 
 class Scale(ChoiceInput1D):
@@ -301,7 +319,6 @@ class Scale(ChoiceInput1D):
             gforms.errors.ElementTypeError:
                 The argument's type is not accepted by this element.
         """
-
         if isinstance(value, int):
             value = str(value)
         return self._set_choices([self._to_choice_list(value)])
@@ -343,7 +360,6 @@ class RadioGrid(Grid):
                 The argument is a list,
                 but its length does not match the number of rows.
         """
-
         # NOTE Maybe it's better to allow list of lists with lengths <= 1
         # grid.set_value([[val1], [], [val3], ...])
         # instead of grid.set_value([val1, Value.EMPTY, val3, ...])
@@ -369,7 +385,6 @@ class CheckboxGrid(Grid, MultiChoiceInput):
                 The argument is a list,
                 but its length does not match the number of rows.
         """
-
         self._set_grid_values(value)
 
 
@@ -386,7 +401,6 @@ class Time(TimeElement):
             gforms.errors.ElementTypeError:
                 The argument's type is not accepted by this element.
         """
-
         if value is Value.EMPTY:
             return self._set_time(None, None, None)
         if isinstance(value, time):
@@ -416,7 +430,6 @@ class Duration(TimeElement):
             gforms.errors.ElementTypeError:
                 The argument's type is not accepted by this element.
         """
-
         if value is Value.EMPTY:
             self._set_time(None, None, None)
             self._timedelta = None
@@ -430,7 +443,6 @@ class Duration(TimeElement):
 
     def validate(self):
         """See base class."""
-
         super().validate()
         if self._timedelta is None:
             return
@@ -460,7 +472,6 @@ class Date(DateElement):
             gforms.errors.ElementTypeError:
                 The argument's type is not accepted by this element.
         """
-
         if value is Value.EMPTY:
             self._date = None
         elif isinstance(value, date):
@@ -486,7 +497,6 @@ class DateTime(DateElement):
             gforms.errors.ElementTypeError:
                 The argument's type is not accepted by this element.
         """
-
         if value is Value.EMPTY:
             date_ = time_ = None
         elif isinstance(value, datetime):
@@ -498,7 +508,6 @@ class DateTime(DateElement):
 
     def payload(self) -> Dict[str, List[str]]:
         """See base class."""
-
         if self._date is None:
             return {}
         payload = super().payload()
@@ -510,7 +519,6 @@ class DateTime(DateElement):
 
     def draft(self) -> List[Tuple]:
         """See base class."""
-
         if self._date is None:
             return []
         result = super().draft()
@@ -520,7 +528,6 @@ class DateTime(DateElement):
 
     def validate(self):
         """See base class."""
-
         super().validate()
         if self.required and self._time is None:
             raise RequiredElement(self)
@@ -533,53 +540,67 @@ class DateTime(DateElement):
         return answer
 
 
-def _val_grid_choices(elem):
-    if elem.is_misconfigured():
-        raise MisconfiguredGrid(elem)
-    if elem.validator.type == GridValidator.Type.UNKNOWN:
-        # Raise, not warn. Otherwise, most probably, form submission will fail
-        # If needed, custom callback should handle such cases
-        raise UnknownValidator(type(elem.validator), elem.validator.type)
-    n = len(elem.rows)
+def _grid_validated_choices(elem):
+    # NOTE this function will choose maximal allowed number of columns,
+    # even if required is False (find a better solution or disable this feature entirely?)
 
+    n = len(elem.rows)
     if isinstance(elem, RadioGrid):
         if len(elem.options) >= n:
             return random.sample(elem.options, k=n)
-        # cols < rows, not required
+        # cols < rows
+        # elem is not required (checked in default_callback by elem.is_misconfigured)
         row_indices = random.sample(range(n), k=len(elem.options))
         choices = [Value.EMPTY for _ in range(n)]
         for opt, idx in zip(elem.options, row_indices):
             choices[idx] = opt
         return choices
 
+    # CheckboxGrid
     if not elem.required:
+        # each column is chosen in a single (random) row
         row_indices = random.choices(range(n), k=len(elem.options))
         choices = [[] for _ in range(n)]
         for opt, idx in zip(elem.options, row_indices):
             choices[idx].append(opt)
         return choices
-    # Required CheckboxGrid with unique columns
+
+    # Required CheckboxGrid
     choices = random.sample(elem.options, k=n)
-    res = [[choice] for choice in choices]
+    res = [[choice] for choice in choices]  # choose at least one option in each row
     remaining = set(elem.options) - set(choices)
     if not remaining:
         return res
+    # assign all remaining columns to random rows
     row_indices = random.choices(range(n), k=len(remaining))
     for opt, idx in zip(remaining, row_indices):
         res[idx].append(opt)
     return res
 
 
+def _cb_validated_choices(elem):
+    raise NotImplementedError()  # !!
+
+
+def _validated_choices(elem):
+    if isinstance(elem, Grid):
+        return _grid_validated_choices(elem)
+    if isinstance(elem, Checkboxes):
+        return _cb_validated_choices(elem)
+    raise NotImplementedError()
+
+
 def default_callback(elem: InputElement, page_index, elem_index) -> Union[ElemValue, EmptyValue]:
     """The default callback implementation for Form.fill."""
 
-    if isinstance(elem, Scale) or isinstance(elem, Dropdown):
-        return random.choice(elem.options)
-    if isinstance(elem, Radio):
-        # Don't auto-choose "Other"
-        return random.choice(elem.options)
+    # Single choice inputs
+    if isinstance(elem, Scale) or isinstance(elem, Dropdown) or isinstance(elem, Radio):
+        opts = elem.options[:]
+        if not elem.required:
+            opts.append(Value.EMPTY)
+        return random.choice(opts)
 
-    # Example: allow "Other"
+    # Example: allow "Other" in Radio
     #     if elem.other_option is not None:
     #         opt = random.choice(elem.options + [elem.other_option])
     #         if opt.other:
@@ -587,18 +608,35 @@ def default_callback(elem: InputElement, page_index, elem_index) -> Union[ElemVa
     #             opt.value = 'Sample text'
     #         return opt
 
+    # Check the validator; for TextInput raise NotImplementedError (later)
+    if isinstance(elem, ValidatedInput) and not isinstance(elem, TextInput) \
+            and elem.validator is not None:
+
+        if elem.is_misconfigured():
+            if elem.required:
+                raise MisconfiguredElement(elem)
+            return Value.EMPTY
+        if elem.validator.has_unknown_type():
+            # Raise, not warn. Otherwise, most probably, form submission will fail
+            # If needed, custom callback should handle such cases
+            raise UnknownValidator(
+                type(elem.validator), [elem.validator.type, elem.validator.subtype]
+            )
+        if elem.validator.bad_args:
+            raise InvalidArguments(
+                type(elem.validator), elem.validator.type,
+                elem.validator.subtype, elem.validator.args
+            )
+        return _validated_choices(elem)
+
     if isinstance(elem, Checkboxes):
         # Don't auto-choose "Other"
-        return random_subset(elem.options, nonempty=elem.required)
+        return random_subset(elem.options, min_size=int(elem.required))
 
     if isinstance(elem, Grid):
-        if elem.validator is not None:
-            # NOTE this function will choose maximal allowed number of columns,
-            # even if required is False (find a better solution or disable this feature entirely?)
-            return _val_grid_choices(elem)
         n = len(elem.rows)
         if isinstance(elem, CheckboxGrid):
-            return [random_subset(elem.options, nonempty=elem.required) for _ in range(n)]
+            return [random_subset(elem.options, min_size=int(elem.required)) for _ in range(n)]
         opts = elem.options
         if not elem.required:
             opts = opts + [Value.EMPTY]
@@ -617,7 +655,6 @@ _element_mapping = {getattr(Element.Type, el_type.__name__.upper()): el_type for
 
 def parse(elem):
     """Creates an Element of the right type from its JSON representation."""
-
     el_type = Element.Type(elem[Element._Index.TYPE])
     if el_type is Element.Type.GRID:
         cls = CheckboxGrid if Grid.parse_multichoice(elem) else RadioGrid

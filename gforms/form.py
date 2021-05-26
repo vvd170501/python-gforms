@@ -61,7 +61,6 @@ class Form:
             gforms.errors.ParseError: The form could not be parsed.
             gforms.errors.ClosedForm: The form is closed.
         """
-
         if http is None:
             http = requests
 
@@ -146,7 +145,6 @@ class Form:
             gforms.errors.InfiniteLoop: The chosen values cannot be submitted,
                 because the page transitions form an infinite loop.
         """
-
         if not self._is_loaded:
             raise FormNotLoaded(self)
         self._is_filled = False

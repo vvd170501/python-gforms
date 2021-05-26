@@ -5,10 +5,10 @@ from abc import ABC, abstractmethod
 from enum import Enum, auto
 from typing import Dict, List, Literal, Union, cast, Any, Optional, Tuple
 
-from .validators import GridValidator, TextValidator
+from .validators import Validator, GridValidator, TextValidator, GridTypes, NumberTypes
 from .errors import DuplicateOther, EmptyOther, InvalidChoice, \
     ElementTypeError, ElementValueError, RequiredElement, RequiredRow, RowTypeError, \
-    InvalidRowChoice
+    InvalidRowChoice, MisconfiguredElement
 from .options import ActionOption, Option, parse as parse_option
 
 
@@ -84,7 +84,6 @@ class Element:
         This method should not be called directly,
         use gforms.elements.parse instead.
         """
-
         return cls(**cls._parse(elem))
 
     @classmethod
@@ -107,7 +106,6 @@ class Element:
 
         For args description, see Form.to_str.
         """
-
         s = f'{self._type_str()}'
         if self.name:
             s = f'{s}: {self.name}'
@@ -158,7 +156,6 @@ class InputElement(Element, ABC):
             gforms.errors.ElementTypeError:
                 The argument's type is not accepted by this element.
         """
-
         raise NotImplementedError()
 
     def validate(self):
@@ -170,13 +167,11 @@ class InputElement(Element, ABC):
             gforms.errors.ValidationError:
                 The value set for this element is invalid.
         """
-
         for i in range(len(self._values)):
             self._validate_entry(i)
 
     def to_str(self, indent=0, include_answer=False):
         """See base class."""
-
         parts = self._header()
         hints = self._hints(indent, include_answer)
         if hints:
@@ -195,7 +190,6 @@ class InputElement(Element, ABC):
         The payload contains the element's value(s)
         and can be used as a (part of) POST request body.
         """
-
         payload = {}
         for entry_id, value in zip(self._entry_ids, self._values):
             if value:
@@ -204,7 +198,6 @@ class InputElement(Element, ABC):
 
     def draft(self) -> List[Tuple]:
         """Returns a (part of) emulated draftResponse for Form.submit."""
-
         result = []
         for entry_id, value in zip(self._entry_ids, self._values):
             if value:
@@ -247,7 +240,6 @@ class InputElement(Element, ABC):
 
         Returned strings should be already indented.
         """
-
         return []
 
     def _answer(self) -> List[str]:
@@ -427,7 +419,6 @@ class OtherChoiceInput(ChoiceInput1D):
 
     def payload(self) -> Dict[str, List[str]]:
         """See base class."""
-
         payload = super().payload()
         # '' is not converted to None (see _validate_entry), so "... not None" isn't applicable
         if not self._other_value:
@@ -441,7 +432,6 @@ class OtherChoiceInput(ChoiceInput1D):
 
     def draft(self) -> List[Tuple]:
         """See base class."""
-
         result = super().draft()
         if not self._other_value:
             return result
@@ -502,13 +492,64 @@ class OtherChoiceInput(ChoiceInput1D):
         return hints
 
 
-class Grid(ChoiceInput):
+class ValidatedInput(InputElement, ABC):
+    """An input element which may have a validator.
+
+    Attributes:
+        validator: The validator, if it exists.
+    """
+
+    @classmethod
+    def _parse(cls, elem):
+        res = super()._parse(elem)
+        res.update({
+            'validator': cls._parse_validator(elem)
+        })
+        return res
+
+    def __init__(self, *, validator, **kwargs):
+        super().__init__(**kwargs)
+        self.validator: Optional[Validator] = validator
+
+    def is_misconfigured(self):
+        """Checks if the element can never be filled with a valid non-empty value."""
+        if self.validator is None:
+            return False
+        if self.validator.has_unknown_type() or self.validator.bad_args:
+            return False
+        return self._is_misconfigured()
+
+    def validate(self):
+        """See base class."""
+        super().validate()
+        if self.validator is not None:
+            if self.required and self._is_misconfigured():
+                raise MisconfiguredElement(self)
+            self.validator.validate(self)
+
+    def _hints(self, indent=0, modify=False):
+        res = []
+        if self.validator is not None:
+            res.append(f'! {self.validator.to_str()} !')
+        return res
+
+    @classmethod
+    @abstractmethod
+    def _parse_validator(cls, elem) -> Optional[Validator]:
+        raise NotImplementedError()
+
+    @abstractmethod
+    def _is_misconfigured(self):
+        # called only when self.validator is not None
+        raise NotImplementedError()
+
+
+class Grid(ValidatedInput, ChoiceInput):
     """A Grid input element.
 
     Attributes:
         rows: The grid row names.
         cols: The grid columns (an alias for options).
-        validator: The grid validator, if it exists.
     """
 
     _cell_symbols = ('?', '+')
@@ -528,30 +569,30 @@ class Grid(ChoiceInput):
         res.update({
             'rows': [entry[cls._Index.ROW_NAME][0] for entry in cls._get_entries(elem)]
         })
-        if len(elem) > cls._Index.VALIDATOR:
-            res['validator'] = GridValidator.parse(elem[cls._Index.VALIDATOR])
         return res
 
-    def __init__(self, *, rows, validator=None, **kwargs):
+    @classmethod
+    def _parse_validator(cls, elem) -> Optional[GridValidator]:
+        if len(elem) > cls._Index.VALIDATOR:
+            return GridValidator.parse(elem[cls._Index.VALIDATOR])
+        return None
+
+    def __init__(self, *, rows, **kwargs):
         super().__init__(**kwargs)
         self.rows = rows
         self.cols = self.options  # alias
-        self.validator: Optional[GridValidator] = validator
 
     @property
     def options(self):
         return self._options[0]
 
-    def is_misconfigured(self):
-        """Checks if the grid can never be filled with valid values."""
-
-        return self.required and len(self.cols) < len(self.rows)
+    def _is_misconfigured(self):
+        return self.validator.subtype is TextValidator.Type.EXCLUSIVE_COLUMNS \
+            and len(self.cols) < len(self.rows)
 
     def _hints(self, indent=0, modify=False):
         # NOTE row/column names may need wrapping
-        res = []
-        if self.validator is not None:
-            res.append(self.validator.to_str())
+        res = super()._hints(indent, modify)
         max_length = max(len(row) for row in self.rows)
         header = ' ' * (max_length + 1) + '|'.join([opt.value for opt in self.options])
         row_fmt = f'{{:>{max_length}}} ' + \
@@ -599,13 +640,6 @@ class Grid(ChoiceInput):
         except RequiredElement as e:
             raise RequiredRow(self, index=e.index)
 
-    def validate(self):
-        """See base class."""
-
-        super().validate()
-        if self.validator is not None:
-            self.validator.validate(self, self._values)
-
 
 class TimeElement(SingleInput):
     """An element which represents a time or a duration."""
@@ -627,13 +661,11 @@ class TimeElement(SingleInput):
 
     def validate(self):
         """See base class."""
-
         if self.required and self._is_empty():
             raise RequiredElement(self)
 
     def payload(self) -> Dict[str, List[str]]:
         """See base class."""
-
         payload = {}
         if self._hour is not None:
             payload[self._part_id('hour')] = self._hour
@@ -645,7 +677,6 @@ class TimeElement(SingleInput):
 
     def draft(self) -> List[Tuple]:
         """See base class."""
-
         hms = []
         for val in [self._hour, self._minute, self._second]:
             if val is not None:
@@ -696,13 +727,11 @@ class DateElement(SingleInput):
 
     def validate(self):
         """See base class."""
-
         if self.required and self._date is None:
             raise RequiredElement(self)
 
     def payload(self) -> Dict[str, List[str]]:
         """See base class."""
-
         if self._date is None:
             return {}
         payload = {
@@ -715,7 +744,6 @@ class DateElement(SingleInput):
 
     def draft(self) -> List[Tuple]:
         """See base class."""
-
         if self._date is None:
             return []
         fmt = '%Y-%m-%d' if self.has_year else '%m-%d'
@@ -736,23 +764,18 @@ class MediaElement(Element):
     pass
 
 
-class TextInput(SingleInput):
-    """An element which accepts text input.
-
-    Attributes:
-        validator: The validator for this element, if it exists.
-    """
+class TextInput(ValidatedInput, SingleInput):
+    """An element which accepts text input."""
 
     class _Index(SingleInput._Index):
         VALIDATOR = 4
 
     @classmethod
-    def _parse(cls, elem):
-        res = super()._parse(elem)
+    def _parse_validator(cls, elem) -> Optional[TextValidator]:
         value = cls._get_entry(elem)
         if len(value) > cls._Index.VALIDATOR:
-            res['validator'] = TextValidator.parse(value[cls._Index.VALIDATOR][0])
-        return res
+            return TextValidator.parse(value[cls._Index.VALIDATOR][0])
+        return None
 
     def __init__(self, *, validator=None, **kwargs):
         super().__init__(**kwargs)
@@ -770,7 +793,6 @@ class TextInput(SingleInput):
             gforms.errors.ElementTypeError:
                 The argument's type is not accepted by this element.
         """
-
         if isinstance(value, str):
             if not value:
                 value = Value.EMPTY
@@ -780,15 +802,14 @@ class TextInput(SingleInput):
             return self._set_value(value)
         raise ElementTypeError(self, value)
 
+    def _is_misconfigured(self):
+        return self.validator.subtype is NumberTypes.RANGE \
+            and self.validator.args[0] > self.validator.args[1]
+
     def _validate_entry(self, index):  # index == 0
         super()._validate_entry(index)
         if self.validator is not None and self._values[index]:
-            self.validator.validate(self, self._values[index][0])
-
-    def _hints(self, indent=0, modify=False):
-        if self.validator is not None:
-            return [self.validator.to_str()]
-        return []
+            self.validator.validate(self)
 
 
 class ActionChoiceInput(ChoiceInput1D):
@@ -814,7 +835,6 @@ class ActionChoiceInput(ChoiceInput1D):
             gforms.errors.ElementTypeError:
                 The argument's type is not accepted by this element.
         """
-
         return self._set_choices([self._to_choice_list(value)])
 
     def _set_choices(self, choices: List[Union[List[ChoiceValue], EmptyValue]]):

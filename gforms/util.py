@@ -1,6 +1,7 @@
 import random
 import re
 from enum import Enum
+from typing import Optional
 
 SEP_WIDTH = 60  # implement dynamic width?
 RADIO_SYMBOLS = ('◯', '⦿')
@@ -51,22 +52,39 @@ def add_indent(text, indent):
     return ''.join(spaces + line for line in text.splitlines(keepends=True))
 
 
-def random_subset(a, nonempty=True):
+def random_subset(a, min_size: Optional[int] = None, max_size: Optional[int] = None):
+    """Choose a random subset of a.
+
+    Args:
+        a: the input sequence
+        min_size: Minimal size of the result.
+        max_size: Maximal size of the result.
+    Returns:
+        A random subset of a
+    """
     def subset(a):
         res = []
+        remaining = []
         for el in a:
             if random.random() < 0.5:
                 res.append(el)
+            else:
+                remaining.append(el)
         return res
 
-    if nonempty:
-        if not a:
-            raise ValueError('Cannot generate a non-empty subset of an empty set')
-        if len(a) == 1:
-            return a[:]
+    if min_size is None:
+        min_size = 0
+    if max_size is None:
+        max_size = len(a)
+    min_size = max(min_size, 0)
+    max_size = min(max_size, len(a))
 
-    res = subset(a)
-    if nonempty:
-        while not res:  # P(>2 iters) <= 1/16
-            res = subset(a)
-    return res
+    if min_size > max_size:
+        raise ValueError('Invalid size range for random_subset')
+    if min_size == max_size:
+        return random.sample(a, min_size)
+    if min_size == 0 and max_size >= len(a):
+        return subset(a)
+
+    k = random.choices(range(min_size, max_size + 1), weights=[...])[0]  # !!
+    return random.sample(a, k)
