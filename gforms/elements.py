@@ -248,7 +248,7 @@ class Checkboxes(ValidatedInput, OtherChoiceInput, MultiChoiceInput):
     @classmethod
     def _parse_validator(cls, elem) -> Optional[CheckboxValidator]:
         value = cls._get_entry(elem)
-        if len(value) > cls._Index.VALIDATOR:
+        if len(value) > cls._Index.VALIDATOR and value[cls._Index.VALIDATOR]:
             return CheckboxValidator.parse(value[cls._Index.VALIDATOR][0])
         return None
 
@@ -271,12 +271,9 @@ class Checkboxes(ValidatedInput, OtherChoiceInput, MultiChoiceInput):
         cnt = len(self.options)
         if self.other_option is not None:
             cnt += 1
-        required = self.validator.args[0]
-        if self.validator.subtype is CheckboxTypes.AT_LEAST and cnt < required:
-            return True
-        if self.validator.subtype is CheckboxTypes.AT_MOST and cnt < required:
-            return True
-        if self.validator.subtype is CheckboxTypes.AT_LEAST and cnt < required:
+        required = self.validator.args[0]  # always > 0
+        if (self.validator.subtype is CheckboxTypes.AT_LEAST
+                or self.validator.subtype is CheckboxTypes.EXACTLY) and cnt < required:
             return True
         return False
 
@@ -540,7 +537,7 @@ class DateTime(DateElement):
         return answer
 
 
-def _grid_validated_choices(elem):
+def _grid_validated_choices(elem: Grid):
     # NOTE this function will choose maximal allowed number of columns,
     # even if required is False (find a better solution or disable this feature entirely?)
 
@@ -578,8 +575,16 @@ def _grid_validated_choices(elem):
     return res
 
 
-def _cb_validated_choices(elem):
-    raise NotImplementedError()  # !!
+def _cb_validated_choices(elem: Checkboxes):
+    required = elem.validator.args[0]
+    if elem.validator.subtype is CheckboxTypes.AT_MOST:
+        return random_subset(elem.options, max_size=required)
+    if len(elem.options) < required:
+        raise NotImplementedError('Need to choose "Other" value to meet validation requirements')
+    if elem.validator.subtype is CheckboxTypes.AT_LEAST:
+        return random_subset(elem.options, min_size=required)
+    if elem.validator.subtype is CheckboxTypes.EXACTLY:
+        return random.sample(elem.options, required)
 
 
 def _validated_choices(elem):

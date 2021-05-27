@@ -144,6 +144,7 @@ class Form:
                 if an element is filled with the callback return value
             gforms.errors.InfiniteLoop: The chosen values cannot be submitted,
                 because the page transitions form an infinite loop.
+            NotImplementedError: The default callback was used for an unsupported element.
         """
         if not self._is_loaded:
             raise FormNotLoaded(self)

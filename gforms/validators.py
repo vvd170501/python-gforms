@@ -250,7 +250,7 @@ class TextValidator(Validator):
             return val >= arg
         if self.subtype is NumberTypes.LT:
             return val < arg
-        if self.subtype is NumberTypes.lE:
+        if self.subtype is NumberTypes.LE:
             return val <= arg
         if self.subtype is NumberTypes.EQ:
             # if arg == 2.0, "1.99..9" will pass validation.

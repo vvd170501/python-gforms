@@ -1,13 +1,14 @@
+import re
 from abc import ABC, abstractmethod
 from datetime import date, datetime, time, timedelta
-from typing import Type, List
+from typing import Type, List, Tuple, Optional
 
 import pytest
 
 from gforms import Form
 from gforms.elements_base import _Action, Element, InputElement, ChoiceInput, ActionChoiceInput, \
-                                 Grid, DateElement, TextInput
-from gforms.elements import Value, CheckboxGridValue
+    Grid, DateElement, TextInput, ValidatedInput
+from gforms.elements import Value, CheckboxGridValue, ElemValue
 from gforms.elements import Short, Paragraph
 from gforms.elements import Checkboxes, Dropdown, Radio, Scale
 from gforms.elements import CheckboxGrid, RadioGrid
@@ -16,11 +17,11 @@ from gforms.elements import Page
 
 from gforms.errors import ElementTypeError, ElementValueError, RequiredElement, InvalidChoice, \
     EmptyOther, InvalidDuration, RequiredRow, InvalidRowChoice, RowTypeError, DuplicateOther, \
-    InfiniteLoop, MisconfiguredGrid, SameColumn
+    InfiniteLoop, MisconfiguredElement, SameColumn, InvalidChoiceCount
 from gforms.errors import InvalidText
 from gforms.options import Option, ActionOption
-from gforms.validators import GridValidator
-
+from gforms.validators import GridValidator, GridTypes, Validator, _Subtype, TextValidator, \
+    CheckboxValidator, NumberTypes, TextTypes, LengthTypes, RegexTypes, CheckboxTypes
 
 # ChoiceInput elements without "Other" option should raise InvalidChoice for empty strings
 
@@ -139,9 +140,101 @@ class SingleEntryTest(ElementTest):
         assert payload == {}
 
 
-class TextTest(SingleEntryTest):
+class ValidatedTest(ElementTest):
+    elem_type: Type[ValidatedInput]
+
+    validator_type: Type[Validator]
+
+    # The following lists' structure:
+    #   [(args_for_validator_init, needed_fixture_names, validator_data)]
+    # for each item in a list:
+    #  - create a test with validator_type(args_for_init)
+    #  - request fixtures for the test
+    #  - pass validator_data for the test
+
+    # validator_data = (valid_value, invalid_value, expected_exc_type)
+    validators: List[Tuple[
+        Tuple[Validator.Type, _Subtype, Optional[list], Optional[str]],
+        List[str], Tuple[ElemValue, ElemValue, Type[Exception]]
+    ]]
+
+    # validator_data = any_non_empty_value
+    misconfigured: List[Tuple[
+        Tuple[Validator.Type, _Subtype, Optional[list], Optional[str]],
+        List[str], ElemValue
+    ]]
+
+    @property
+    @abstractmethod
+    def validator_type(self):
+        raise NotImplementedError()
+
+    @property
+    @abstractmethod
+    def validators(self):
+        raise NotImplementedError()
+
+    @property
+    @abstractmethod
+    def misconfigured(self):
+        raise NotImplementedError()
+
+    @pytest.fixture(autouse=True)
+    def empty_validator(self, kwargs):
+        kwargs['validator'] = None
+
+    @pytest.fixture
+    def validator_data(self, request, kwargs):
+        # NOTE this fixture should be used before element
+        (val_type, subtype, args, msg), fixtures, ret = request.param
+        if isinstance(args, tuple):
+            args = list(args)
+        elif args is not None:
+            args = [args]
+
+        validator = self.validator_type(
+            type_=val_type, subtype=subtype, args=args, bad_args=False, error_msg=msg
+        )
+        kwargs['validator'] = validator  # is applied after empty_validator
+        for fixture in fixtures:
+            request.getfixturevalue(fixture)
+        return ret
+
+    @pytest.fixture
+    def val_data(self, request):
+        return request.param
+
+    def test_misconfigured(self, validator_data, optional, required):
+        # with each validator in self.misconfigured:
+        #  - assert MisconfiguredElement is raised on value
+        #  - check empty value
+        value = validator_data
+        optional.set_value(value)
+        required.set_value(value)
+        with pytest.raises(MisconfiguredElement):
+            optional.validate()
+        with pytest.raises(MisconfiguredElement):
+            required.validate()
+        optional.set_value(Value.EMPTY)
+        optional.validate()
+
+    def test_validators(self, validator_data, element):
+        # for each validator in self.validators:
+        #  - check a valid value
+        #  - assert the correct exception is raised on invalid value
+        valid, invalid, exc = validator_data
+        element.set_value(invalid)
+        with pytest.raises(exc, match=element.validator.error_msg):
+            element.validate()
+        element.set_value(valid)
+        element.validate()
+
+
+class TextTest(SingleEntryTest, ValidatedTest):
     elem_type: Type[TextInput]
     allow_strings = True
+
+    validator_type = TextValidator
 
     def test_empty_string(self, required, optional):
         self.check_empty_value(required, optional, '')
@@ -154,6 +247,55 @@ class TextTest(SingleEntryTest):
 class TestShort(TextTest):
     elem_type = Short
 
+    ptn = re.compile(r'q[a-z]+e')
+    validators = [
+        ((TextValidator.Type.NUMBER, NumberTypes.GT, 50, 'some_text'),
+            [], ('100', '50', InvalidText)),  # test with an error message
+
+        ((TextValidator.Type.NUMBER, NumberTypes.GT, 50, None), [], ('100', '50', InvalidText)),
+        ((TextValidator.Type.NUMBER, NumberTypes.GE, 50, None), [], ('50', '0', InvalidText)),
+        ((TextValidator.Type.NUMBER, NumberTypes.LT, 50, None), [], ('0', '50', InvalidText)),
+        ((TextValidator.Type.NUMBER, NumberTypes.LE, 50, None), [], ('50', '100', InvalidText)),
+        ((TextValidator.Type.NUMBER, NumberTypes.EQ, 50, None), [], ('50', '51', InvalidText)),
+        ((TextValidator.Type.NUMBER, NumberTypes.NE, 50, None), [], ('51', '50', InvalidText)),
+        ((TextValidator.Type.NUMBER, NumberTypes.RANGE, (40, 60), None),
+            [], ('50', '100', InvalidText)),
+        ((TextValidator.Type.NUMBER, NumberTypes.NOT_RANGE, (40, 60), None),
+            [], ('100', '50', InvalidText)),
+        ((TextValidator.Type.NUMBER, NumberTypes.IS_NUMBER, None, None),
+            [], ('1.23', 'abc', InvalidText)),
+        ((TextValidator.Type.NUMBER, NumberTypes.IS_INT, None, None),
+            [], ('1', '1.23', InvalidText)),
+
+        ((TextValidator.Type.TEXT, TextTypes.CONTAINS, 'qwe', None),
+            [], ('_qwe_', 'abc', InvalidText)),
+        ((TextValidator.Type.TEXT, TextTypes.NOT_CONTAINS, 'qwe', None),
+            [], ('abc', '_qwe_', InvalidText)),
+        ((TextValidator.Type.TEXT, TextTypes.URL, None, None),
+            [], ('https://example.com', 'abc', InvalidText)),
+        ((TextValidator.Type.TEXT, TextTypes.EMAIL, None, None),
+            [], ('user@example.com', 'abc', InvalidText)),
+
+        ((TextValidator.Type.LENGTH, LengthTypes.MAX_LENGTH, 3, None),
+            [], ('qwe', 'qwer', InvalidText)),
+        ((TextValidator.Type.LENGTH, LengthTypes.MIN_LENGTH, 3, None),
+            [], ('qwe', 'qw', InvalidText)),
+
+        # ptn = re.compile(r'q[a-z]+e')
+        ((TextValidator.Type.REGEX, RegexTypes.CONTAINS, ptn, None),
+            [], ('_qwve_', '_q!e_', InvalidText)),
+        ((TextValidator.Type.REGEX, RegexTypes.NOT_CONTAINS, ptn, None),
+            [], ('_q!e_', '_qwve_', InvalidText)),
+        ((TextValidator.Type.REGEX, RegexTypes.MATCHES, ptn, None),
+            [], ('qwve', '_qwve', InvalidText)),
+        ((TextValidator.Type.REGEX, RegexTypes.NOT_MATCHES, ptn, None),
+            [], ('_qwve', 'qwve', InvalidText)),
+    ]
+
+    misconfigured = [
+        ((TextValidator.Type.NUMBER, NumberTypes.RANGE, (100, 0), None), [], '50'),
+    ]
+
     def test_multiline(self, element):
         element.set_value('Qwe\n')
         with pytest.raises(InvalidText):
@@ -162,6 +304,10 @@ class TestShort(TextTest):
 
 class TestParagraph(TextTest):
     elem_type = Paragraph
+
+    # Already tested for Short
+    validators = {}
+    misconfigured = {}
 
     def test_multiline(self, element):
         value = 'Qwe\r\nRty\r\n'
@@ -293,16 +439,54 @@ class TestRadio(MayHaveOther, ActionChoiceTest):
         assert element.next_page == element.other_option.next_page
 
 
-class TestCheckboxes(MayHaveOther):
+class TestCheckboxes(ValidatedTest, MayHaveOther):
     elem_type = Checkboxes
     allow_lists = True
     # whether or not this class allows list elements to be lists or strings
     allow_list_lists = False
     allow_list_strings = True
 
+    opt_count = 3
+
+    validator_type = CheckboxValidator
+
+    validators = [
+        ((CheckboxValidator.Type.DEFAULT, CheckboxTypes.AT_LEAST, 2, None),
+            [], (['Opt1', 'Other'], ['Opt1'], InvalidChoiceCount)),  # with "Other" selected
+
+        ((CheckboxValidator.Type.DEFAULT, CheckboxTypes.AT_LEAST, 2, None),
+            [], (['Opt1', 'Opt2'], ['Opt1'], InvalidChoiceCount)),
+        ((CheckboxValidator.Type.DEFAULT, CheckboxTypes.AT_MOST, 2, None),
+            [], (['Opt1', 'Opt2'], ['Opt1', 'Opt2', 'Opt3'], InvalidChoiceCount)),
+        ((CheckboxValidator.Type.DEFAULT, CheckboxTypes.EXACTLY, 2, None),
+            [], (['Opt1', 'Opt2'], ['Opt1'], InvalidChoiceCount)),
+
+        # Edge case -- need to choose all options, including "Other"
+        # Should not raise MisconfiguredElement
+        (
+            (CheckboxValidator.Type.DEFAULT, CheckboxTypes.AT_LEAST, opt_count + 1, None), [],
+            (
+                [f'Opt{i+1}' for i in range(opt_count)] + ['Other'],
+                ['Opt1'],
+                InvalidChoiceCount
+            )
+        ),
+    ]
+
+    misconfigured = [
+        ((CheckboxValidator.Type.DEFAULT, CheckboxTypes.EXACTLY, opt_count + 1, None),
+            ['no_other'], ['Opt1']),
+        ((CheckboxValidator.Type.DEFAULT, CheckboxTypes.AT_LEAST, opt_count + 1, None),
+            ['no_other'], ['Opt1']),
+
+        # With "Other"
+        ((CheckboxValidator.Type.DEFAULT, CheckboxTypes.EXACTLY, opt_count + 2, None),
+            [], ['Opt1']),
+    ]
+
     @pytest.fixture
     def options(self) -> List[Option]:
-        return [Option(value=f'Opt{i}', other=False) for i in range(1, 4)]
+        return [Option(value=f'Opt{i}', other=False) for i in range(1, self.opt_count + 1)]
 
     @pytest.fixture
     def other_option(self) -> Option:
@@ -360,11 +544,13 @@ class TestScale(ChoiceTest1D):
         self.check_value(element, int(element.options[0].value), [element.options[0].value])
 
 
-class GridTest(ChoiceTest):
+class GridTest(ValidatedTest, ChoiceTest):
     elem_type: Type[Grid]
     allow_lists = True
     allow_row_lists = False
     allow_row_strings = True
+
+    validator_type = GridValidator
 
     row_count = 5
     col_count = 3
@@ -375,14 +561,13 @@ class GridTest(ChoiceTest):
     def add_rows(self, kwargs):
         kwargs['rows'] = [f'Row{i}' for i in range(1, self.row_count + 1)]
 
-    @pytest.fixture(autouse=True)
-    def add_options(self, kwargs):
-        opt_row = [Option(value=f'Col{i}', other=False) for i in range(1, self.col_count + 1)]
-        kwargs['options'] = [opt_row] * self.row_count
-
     @pytest.fixture
-    def with_validator(self, element):
-        element.validator = GridValidator(type_=GridValidator.Type.EXCLUSIVE_COLUMNS)
+    def options(self):
+        return [Option(value=f'Col{i}', other=False) for i in range(1, self.col_count + 1)]
+
+    @pytest.fixture(autouse=True)
+    def add_options(self, kwargs, options):
+        kwargs['options'] = [options] * self.row_count
 
     def test_row_invalid_type(self, element, invalid_row_type):
         values = [invalid_row_type] * self.row_count
@@ -424,30 +609,31 @@ class GridTest(ChoiceTest):
             element.set_value(values)
 
 
+# Run inherited tests and test validation
 class TestRadioGrid(GridTest):
     elem_type = RadioGrid
 
+    validators = [(
+        (GridValidator.Type.DEFAULT, GridTypes.EXCLUSIVE_COLUMNS, None, None),
+        ['wide_grid'],
+        (
+            [f'Col{i+1}' for i in range(GridTest.row_count)],
+            ['Col1'] * GridTest.row_count,
+            SameColumn
+        )
+    )]
+
+    misconfigured = [
+        ((GridValidator.Type.DEFAULT, GridTypes.EXCLUSIVE_COLUMNS, None, None),
+            [], ['Col1'] * GridTest.row_count),
+    ]
+
     @pytest.fixture
-    def wide_grid(self, kwargs, add_options):
+    def wide_grid(self, options):
         # all rows are the same object -> it's sufficient to extend only the first one
-        kwargs['options'][0] *= 2
-
-    def test_misconfigured(self, element, with_validator):
-        element.set_value([element.options[0]] * len(element.rows))
-        with pytest.raises(MisconfiguredGrid):
-            element.validate()
-
-    def test_same_column(self, wide_grid, element, with_validator):
-        element.set_value([element.options[0]] * len(element.rows))
-        with pytest.raises(SameColumn) as exc_info:
-            element.validate()
-        assert exc_info.type == SameColumn
-
-    def test_validator_ok(self, wide_grid, element, with_validator):
-        element.set_value([element.options[i] for i in range(len(element.rows))])
-        with pytest.raises(SameColumn) as exc_info:
-            element.validate()
-        assert exc_info.type == SameColumn
+        options *= 2
+        for i in range(len(options)):
+            options[i] = Option(value=f'Col{i+1}', other=False)
 
 
 class TestCheckboxGrid(GridTest):
@@ -455,6 +641,10 @@ class TestCheckboxGrid(GridTest):
     allow_row_lists = True
     allow_row_list_lists = False
     allow_row_list_strings = True
+
+    # Skip validator tests (tested for RagioGrid)
+    validators = {}
+    misconfigured = {}
 
     def sample_choice(self, element, get_choice=lambda x: x):
         return [

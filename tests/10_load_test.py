@@ -13,7 +13,7 @@ from gforms.elements import Date, DateTime, Time, Duration
 
 from gforms.errors import ClosedForm, ParseError
 from gforms.options import ActionOption
-from gforms.validators import GridValidator, TextValidator
+from gforms.validators import GridValidator, TextValidator, GridTypes, CheckboxTypes
 
 from .conftest import BaseFormTest
 
@@ -358,4 +358,19 @@ class TestGridValidators(ElementTest):
         r_grid, c_grid = first_page
         assert isinstance(r_grid.validator, GridValidator)
         assert isinstance(c_grid.validator, GridValidator)
-        assert r_grid.validator.type == GridValidator.Type.EXCLUSIVE_COLUMNS
+        assert r_grid.validator.subtype == GridTypes.EXCLUSIVE_COLUMNS
+
+
+class TestCheckboxValidators(ElementTest):
+    form_type = 'checkbox_validation'
+    expected = [[Checkboxes] * 3]
+
+    @pytest.mark.required
+    def test_validator_types(self, first_page):
+        expected_types = [CheckboxTypes.AT_LEAST, CheckboxTypes.AT_MOST, CheckboxTypes.EXACTLY]
+        for elem, expected in zip(first_page, expected_types):
+            validator = elem.validator
+            assert validator is not None
+            assert validator.subtype is expected
+            assert validator.args == [2]
+            assert validator.error_msg == 'Err_msg'

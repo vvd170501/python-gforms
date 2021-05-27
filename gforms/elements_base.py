@@ -161,11 +161,14 @@ class InputElement(Element, ABC):
     def validate(self):
         """Checks if the element has a valid value.
 
-        Raises a ValidationError if the value is invalid.
+        Raises an ValidationError if the value is invalid.
 
         Raises:
-            gforms.errors.ValidationError:
-                The value set for this element is invalid.
+            gforms.errors.RequiredElement:
+                This element is required, but the value is empty.
+            gforms.errors.InvalidValue:
+                The value has a correct type,
+                but is not valid for this element.
         """
         for i in range(len(self._values)):
             self._validate_entry(i)
@@ -520,10 +523,23 @@ class ValidatedInput(InputElement, ABC):
         return self._is_misconfigured()
 
     def validate(self):
-        """See base class."""
+        """Checks if the element has a valid value.
+
+        May raise any of the exceptions specified in the base method.
+
+        If MisconfiguredElement is raised and this element is required,
+        you should skip the page with this element, if possible.
+        Otherwise, the form is not submittable.
+
+        Raises:
+            gforms.errors.MisconfiguredElement:
+                This element will not accept any non-empty value.
+        """
         super().validate()
+        if not any(self._values):  # element is empty
+            return
         if self.validator is not None:
-            if self.required and self._is_misconfigured():
+            if self._is_misconfigured():
                 raise MisconfiguredElement(self)
             self.validator.validate(self)
 
@@ -573,8 +589,8 @@ class Grid(ValidatedInput, ChoiceInput):
 
     @classmethod
     def _parse_validator(cls, elem) -> Optional[GridValidator]:
-        if len(elem) > cls._Index.VALIDATOR:
-            return GridValidator.parse(elem[cls._Index.VALIDATOR])
+        if len(elem) > cls._Index.VALIDATOR and elem[cls._Index.VALIDATOR]:
+            return GridValidator.parse(elem[cls._Index.VALIDATOR][0])
         return None
 
     def __init__(self, *, rows, **kwargs):
@@ -587,7 +603,7 @@ class Grid(ValidatedInput, ChoiceInput):
         return self._options[0]
 
     def _is_misconfigured(self):
-        return self.validator.subtype is TextValidator.Type.EXCLUSIVE_COLUMNS \
+        return self.validator.subtype is GridTypes.EXCLUSIVE_COLUMNS \
             and len(self.cols) < len(self.rows)
 
     def _hints(self, indent=0, modify=False):
@@ -773,13 +789,9 @@ class TextInput(ValidatedInput, SingleInput):
     @classmethod
     def _parse_validator(cls, elem) -> Optional[TextValidator]:
         value = cls._get_entry(elem)
-        if len(value) > cls._Index.VALIDATOR:
+        if len(value) > cls._Index.VALIDATOR and value[cls._Index.VALIDATOR]:
             return TextValidator.parse(value[cls._Index.VALIDATOR][0])
         return None
-
-    def __init__(self, *, validator=None, **kwargs):
-        super().__init__(**kwargs)
-        self.validator: Optional[TextValidator] = validator
 
     def set_value(self, value: Union[TextValue, EmptyValue]):
         """Sets the value for this element.
@@ -805,11 +817,6 @@ class TextInput(ValidatedInput, SingleInput):
     def _is_misconfigured(self):
         return self.validator.subtype is NumberTypes.RANGE \
             and self.validator.args[0] > self.validator.args[1]
-
-    def _validate_entry(self, index):  # index == 0
-        super()._validate_entry(index)
-        if self.validator is not None and self._values[index]:
-            self.validator.validate(self)
 
 
 class ActionChoiceInput(ChoiceInput1D):
