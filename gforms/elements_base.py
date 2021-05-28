@@ -161,7 +161,7 @@ class InputElement(Element, ABC):
     def validate(self):
         """Checks if the element has a valid value.
 
-        Raises an ValidationError if the value is invalid.
+        Raises a ValidationError if the value is invalid.
 
         Raises:
             gforms.errors.RequiredElement:
