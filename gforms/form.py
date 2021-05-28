@@ -61,7 +61,6 @@ class Form:
             gforms.errors.ParseError: The form could not be parsed.
             gforms.errors.ClosedForm: The form is closed.
         """
-
         if http is None:
             http = requests
 
@@ -95,6 +94,9 @@ class Form:
         Returns:
             A (multiline) string representation of this form.
         """
+        if not self._is_loaded:
+            raise FormNotLoaded(self)
+
         if not self._is_filled:
             include_answer = False
 
@@ -145,8 +147,8 @@ class Form:
                 if an element is filled with the callback return value
             gforms.errors.InfiniteLoop: The chosen values cannot be submitted,
                 because the page transitions form an infinite loop.
+            NotImplementedError: The default callback was used for an unsupported element.
         """
-
         if not self._is_loaded:
             raise FormNotLoaded(self)
         self._is_filled = False

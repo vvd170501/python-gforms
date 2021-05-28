@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 class FormsError(Exception, ABC):
     """Base error class"""
 
-    def __init__(self, *args, details=None, **kwargs):
+    def __init__(self, *args, details=None):
         super().__init__()
         self.details = details
 
@@ -66,14 +66,20 @@ class RowError(ElementError):
         return self.elem.rows[self.index]
 
 
-class ValidationError(FormsError, ValueError):
+class ValidationError(ElementError, ValueError):
     pass
 
 
-class InvalidValue(ElementError, ValidationError):
+class InvalidValue(ValidationError):
     def __init__(self, elem, value, *args, **kwargs):
         super().__init__(elem, *args, **kwargs)
         self.value = value
+
+
+class MisconfiguredElement(ValidationError):
+    def _message(self):
+        return f'The validator requirements for element "{self.elem.name}" are:' \
+               f' "{self.elem.validator.to_str()}". A valid value for this element does not exist.'
 
 
 # The following errors may be raised from InputElement.set_value
@@ -126,7 +132,7 @@ class InvalidRowChoice(InvalidChoice, RowError):
 
 # The following errors may be raised from InputElement.validate
 
-class RequiredElement(ElementError, ValidationError):
+class RequiredElement(ValidationError):
     def _message(self):
         return f'An entry in required element "{self.elem.name}" is empty'
 
@@ -168,21 +174,22 @@ class UnknownValidator(ValidatorWarning):
 
 
 class InvalidArguments(ValidatorWarning):
-    def __init__(self, val_type, subtype, args):
+    def __init__(self, cls, val_type, subtype, args):
         super().__init__()
+        self.cls = cls
         self.val_type = val_type
         self.subtype = subtype
         self.args = args
 
     def __str__(self):
-        return 'Cannot convert arguments for a validator.' \
+        return f'Cannot convert arguments for {self.cls.__name__}.' \
               f' Type: {self.val_type} ({self.subtype}), Arguments: {repr(self.args)}.' \
                ' Validator is disabled'
 
 
-class SameColumn(InvalidValue):
-    def __init__(self, elem, value=None, column=None, *args, **kwargs):
-        super().__init__(elem, value, *args, **kwargs)
+class SameColumn(ValidationError):
+    def __init__(self, elem, column=None, *args, **kwargs):
+        super().__init__(elem, *args, **kwargs)
         self.column = column
 
     def _message(self):
@@ -191,7 +198,12 @@ class SameColumn(InvalidValue):
                ' The choices must be unique'
 
 
-class MisconfiguredGrid(SameColumn):
+class InvalidChoiceCount(ValidationError):
+    def __init__(self, elem, cnt, *args, **kwargs):
+        super().__init__(elem, *args, **kwargs)
+        self.cnt = cnt
+
     def _message(self):
-        return f'Impossible to fill grid "{self.elem}": all rows are required and the choices' \
-               ' must be unique, but there are less columns than rows'
+        val = self.elem.validator
+        return f'{self.cnt} option(s) were chosen in "{self.elem.name}",' \
+               f' but {val.subtype.descr(val.args)} are required'

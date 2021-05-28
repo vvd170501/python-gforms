@@ -1,14 +1,19 @@
 import re
+from abc import ABC, abstractmethod
 from collections import Counter
-from enum import Enum, auto
-from typing import List, Union
+from typing import TYPE_CHECKING, List, cast
 from warnings import warn
 
-from .errors import MisconfiguredGrid, SameColumn, UnknownValidator, InvalidText, InvalidArguments
+from .errors import SameColumn, UnknownValidator, InvalidText, InvalidArguments, InvalidChoiceCount
 from .util import EMAIL_REGEX, URL_REGEX, DefaultEnum, ArgEnum
 
+if TYPE_CHECKING:
+    from elements import Checkboxes
 
-class _Subtype(DefaultEnum, ArgEnum):
+
+class Subtype(DefaultEnum, ArgEnum):
+    # Add UNKNOWN dynamically?
+
     @property
     def argnum(self):
         return self.arg[0]
@@ -19,7 +24,118 @@ class _Subtype(DefaultEnum, ArgEnum):
         return self.arg[1].format(*args)
 
 
-class NumberTypes(_Subtype):
+class Validator(ABC):
+    """A validator for a form element.
+
+    Attributes:
+        type: A member of cls.Type, indicating the validator's type.
+        subtype: The validator's subtype.
+        args: Validator arguments.
+        error_msg: Custom error message, if it exists.
+        bad_args: A boolean
+            indicating if the arguments could not be parsed correctly.
+    """
+
+    class Type(DefaultEnum, ArgEnum):
+        # Add UNKNOWN dynamically?
+
+        @property
+        def subtype_class(self):
+            return self.arg
+
+    class _Index:
+        TYPE = 0
+        SUBTYPE = 1
+        ARGS_OR_MSG = 2
+
+    @classmethod
+    def parse(cls, val):
+        """Creates a Validator from its JSON representation."""
+        if len(val) <= cls._Index.SUBTYPE:
+            return cls._unknown_validator(val)
+        type_ = cls.Type(val[cls._Index.TYPE])
+        if type_ is cls.Type.UNKNOWN:
+            return cls._unknown_validator(val)
+        subtype_cls = type_.subtype_class
+        subtype = subtype_cls(val[cls._Index.SUBTYPE])
+        if subtype is subtype_cls.UNKNOWN:
+            return cls._unknown_validator(val, type_, subtype)
+
+        argnum = subtype.argnum
+        msg_index = cls._Index.ARGS_OR_MSG
+        args = None
+        msg = None
+        if argnum > 0 and len(val) > cls._Index.ARGS_OR_MSG:
+            args = val[cls._Index.ARGS_OR_MSG]
+            msg_index += 1
+        # If args are needed but not found, msg_index will not be increased. msg is not used -> ok
+        if len(val) > msg_index:
+            msg = val[msg_index]
+        args, valid_args = cls._parse_args(args, type_, subtype, argnum)
+        if not valid_args:
+            warn(InvalidArguments(cls, type_, subtype, args))
+        return cls(type_, subtype, args, not valid_args, msg)
+
+    def __init__(self, type_, subtype, args, bad_args, error_msg):
+        self.type = type_
+        self.subtype: Subtype = subtype
+        self.args = args
+        self.error_msg = error_msg
+        self.bad_args = bad_args
+
+    def validate(self, elem):
+        """Validates the element's value."""
+        # REL_TODO alternative variant:
+        #   validate(self, values) -> Optional[Tuple[Type[Exception], Any]]
+        #   Return exception class and args, create and raise the exception in element's validate()
+        #   In this case, validator is less dependent on element implementation details.
+        #   Also, validator testing should be easier.
+        if self.has_unknown_type() or self.bad_args:
+            return
+        self._validate(elem, elem._values)
+
+    def has_unknown_type(self):
+        return self.type is self.Type.UNKNOWN or self.subtype is self.type.subtype_class.UNKNOWN
+
+    def to_str(self):
+        if self.has_unknown_type():
+            return 'Unknown validator'
+        return f'{self._descr()}'
+
+    @classmethod
+    def _unknown_validator(cls, val, type_=None, subtype=None):
+        warn(UnknownValidator(cls, val))
+        return cls(type_ or cls.Type.UNKNOWN, subtype or cls.Type.UNKNOWN,
+                   args=None, bad_args=False, error_msg=None)  # only type is important
+
+    @classmethod
+    def _parse_args(cls, args, type_, subtype, argnum):
+        """
+        Convert arguments to needed type. All args are received as strings
+        Return value: converted args and a value indicating if conversion was successful
+        """
+        if args is None:
+            return None, not argnum  # Error if args are required, but not found
+        if not isinstance(args, list):
+            return args, False  # e.g. new argnum is zero -> we get err_msg instead of args
+        if len(args) != argnum:
+            return args, False
+        return cls._parse_arg_list(args, type_, subtype)
+
+    @classmethod
+    @abstractmethod
+    def _parse_arg_list(cls, args, type_, subtype):
+        raise NotImplementedError()
+
+    def _descr(self):
+        return self.subtype.descr(self.args)
+
+    @abstractmethod
+    def _validate(self, elem, values: List[List[str]]):
+        raise NotImplementedError()
+
+
+class NumberTypes(Subtype):
     UNKNOWN = (-1, (0, 'Unknown validator'))
     GT = (1, (1, 'Number > {}'))
     GE = (2, (1, 'Number >= {}'))
@@ -33,7 +149,7 @@ class NumberTypes(_Subtype):
     IS_INT = (10, (0, 'An integer'))
 
 
-class TextTypes(_Subtype):
+class TextTypes(Subtype):
     UNKNOWN = (-1, (0, 'Unknown validator'))
     CONTAINS = (100, (1, 'Must contain "{}"'))
     NOT_CONTAINS = (101, (1, 'Must not contain "{}"'))
@@ -41,13 +157,13 @@ class TextTypes(_Subtype):
     URL = (103, (0, 'URL'))
 
 
-class LengthTypes(_Subtype):
+class LengthTypes(Subtype):
     UNKNOWN = (-1, (0, 'Unknown validator'))
-    MAX_LENGTH = (202, (1, 'Max length: {}'))
-    MIN_LENGTH = (203, (1, 'Min length: {}'))
+    MAX_LENGTH = (202, (1, 'Max {} characters'))
+    MIN_LENGTH = (203, (1, 'Min {} characters'))
 
 
-class RegexTypes(_Subtype):
+class RegexTypes(Subtype):
     UNKNOWN = (-1, (0, 'Unknown validator'))
     CONTAINS = (299, (1, 'Must contain regex "{}"'))
     NOT_CONTAINS = (300, (1, 'Must not contain regex "{}"'))
@@ -60,102 +176,18 @@ class RegexTypes(_Subtype):
         return self.arg[1].format(*(arg.pattern for arg in args))
 
 
-Subtype = Union[NumberTypes, TextTypes, LengthTypes, RegexTypes]
-
-
-class TextValidator:
-    class _Index:
-        TYPE = 0
-        SUBTYPE = 1
-        ARGS_OR_MSG = 2
-
-    class Type(DefaultEnum, ArgEnum):
+class TextValidator(Validator):
+    class Type(Validator.Type):
         UNKNOWN = (-1, None)
         NUMBER = (1, NumberTypes)
         TEXT = (2, TextTypes)
         REGEX = (4, RegexTypes)
         LENGTH = (6, LengthTypes)
 
-        @property
-        def subtype_class(self):
-            return self.arg
-
     @classmethod
-    def parse(cls, val):
-        if len(val) <= cls._Index.SUBTYPE:
-            return cls._unknown_validator(val)
-        type_ = cls.Type(val[cls._Index.TYPE])
-        if type_ is cls.Type.UNKNOWN:
-            return cls._unknown_validator(val)
-        subtype_cls = type_.subtype_class
-        subtype = subtype_cls(val[cls._Index.SUBTYPE])
-        if subtype is subtype_cls.UNKNOWN:
-            return cls._unknown_validator(val, type_, subtype)
-        argnum = subtype.argnum
-        msg_index = cls._Index.ARGS_OR_MSG
-        args = None
-        msg = None
-        if argnum > 0:
-            msg_index += 1
-            args = val[cls._Index.ARGS_OR_MSG]
-        if len(val) > msg_index:
-            msg = val[msg_index]
-        args, valid_args = cls._parse_args(args, type_, subtype, argnum)
-        if not valid_args:
-            warn(InvalidArguments(type_, subtype, args))
-        return cls(type_, subtype, args, not valid_args, msg)
-
-    def __init__(self, type_, subtype, args, bad_args, error_msg):
-        self.type = type_
-        self.subtype: Subtype = subtype
-        self.args = args
-        self.error_msg = error_msg
-        self.bad_args = bad_args
-
-    def validate(self, elem, value: str):
-        if self.has_unknown_type() or self.bad_args:
-            return
-        is_ok = False
-        if self.type is self.Type.NUMBER:
-            is_ok = self._validate_number(value)
-        if self.type is self.Type.TEXT:
-            is_ok = self._validate_text(value)
-        if self.type is self.Type.LENGTH:
-            is_ok = self._validate_length(value)
-        if self.type is self.Type.REGEX:
-            is_ok = self._validate_regex(value)
-        if not is_ok:
-            descr = self._descr()
-            if self.error_msg:
-                descr = f'{self.error_msg} ({descr})'
-            raise InvalidText(elem, value, details=descr)
-
-    def to_str(self):
-        if self.has_unknown_type():
-            return '! Unknown validator !'
-        return f'! {self._descr()} !'
-
-    def has_unknown_type(self):
-        return self.type is self.Type.UNKNOWN or self.subtype is self.type.subtype_class.UNKNOWN
-
-    @classmethod
-    def _unknown_validator(cls, val, type_=None, subtype=None):
-        warn(UnknownValidator(cls, val))
-        return cls(type_ or cls.Type.UNKNOWN, subtype or cls.Type.UNKNOWN,
-                   args=None, bad_args=False, error_msg=None)
-
-    @classmethod
-    def _parse_args(cls, args, type_, subtype, argnum):
-        """
-        Convert arguments to needed type. All args are received as strings
-        Return value: converted args and a value indicating if conversion was successful
-        """
-        if args is None:
-            return None, not argnum  # Error if args are required, but not found
-        if len(args) != argnum:
-            return args, False
+    def _parse_arg_list(cls, args, type_, subtype):
         if type_ is cls.Type.TEXT:
-            return args, True  # needs a string
+            return args, True  # only string args
         if type_ is cls.Type.LENGTH:
             try:
                 return [int(arg) for arg in args], True
@@ -177,10 +209,27 @@ class TextValidator:
                 return args, False
 
     def _descr(self):
-        s = self.subtype.descr(self.args)
-        if self.type is self.Type.LENGTH:
-            return s
-        return 'Allowed values: ' + s
+        return 'Allowed values: ' + super()._descr()
+
+    def _validate(self, elem, values: List[List[str]]):
+        if not values[0]:  # empty element
+            return
+        value = values[0][0]
+        if self.type is self.Type.NUMBER:
+            is_ok = self._validate_number(value)
+        elif self.type is self.Type.TEXT:
+            is_ok = self._validate_text(value)
+        elif self.type is self.Type.LENGTH:
+            is_ok = self._validate_length(value)
+        elif self.type is self.Type.REGEX:
+            is_ok = self._validate_regex(value)
+        else:
+            raise NotImplementedError()
+        if not is_ok:
+            descr = self._descr()
+            if self.error_msg:
+                descr = f'{self.error_msg} ({descr})'
+            raise InvalidText(elem, value, details=descr)
 
     def _validate_number(self, val):
         if self.subtype is NumberTypes.IS_INT:
@@ -206,7 +255,7 @@ class TextValidator:
             return val >= arg
         if self.subtype is NumberTypes.LT:
             return val < arg
-        if self.subtype is NumberTypes.lE:
+        if self.subtype is NumberTypes.LE:
             return val <= arg
         if self.subtype is NumberTypes.EQ:
             # if arg == 2.0, "1.99..9" will pass validation.
@@ -215,11 +264,12 @@ class TextValidator:
         if self.subtype is NumberTypes.NE:
             return val != arg
         if self.subtype is NumberTypes.RANGE:
-            # THe first arg can be greater than the second
-            # In this case all values will be invalid. Raise another error? (see MisconfiguredGrid)
+            # The first arg can be greater than the second. This is checked in TextInput.
             return self.args[0] <= val <= self.args[1]
         if self.subtype is NumberTypes.NOT_RANGE:
-            return not self.args[0] <= val <= self.args[1]
+            # The first arg can be greater than the second, it's ok
+            return val < min(self.args) or val > max(self.args)
+        raise NotImplementedError()
 
     def _validate_text(self, val):
         if self.subtype is TextTypes.CONTAINS:
@@ -233,12 +283,14 @@ class TextValidator:
             # It seems that URLS are validaetd on the server side
             # (client performs only basic checks)
             return URL_REGEX.match(val) is not None
+        raise NotImplementedError()
 
     def _validate_length(self, val):
         if self.subtype is LengthTypes.MIN_LENGTH:
             return len(val) >= self.args[0]
         if self.subtype is LengthTypes.MAX_LENGTH:
             return len(val) <= self.args[0]
+        raise NotImplementedError()
 
     def _validate_regex(self, val):
         if self.subtype is RegexTypes.CONTAINS:
@@ -249,37 +301,71 @@ class TextValidator:
             return self.args[0].match(val) is not None
         if self.subtype is RegexTypes.NOT_MATCHES:
             return self.args[0].match(val) is None
+        raise NotImplementedError()
 
 
-class GridValidator:
-    class Type(Enum):
-        EXCLUSIVE_COLUMNS = auto()
-        UNKNOWN = auto()
+class GridTypes(Subtype):
+    UNKNOWN = (-1, (0, 'Unknown validator'))
+    EXCLUSIVE_COLUMNS = (205, (0, 'Max 1 response per column'))
+
+
+class GridValidator(Validator):
+    class Type(Validator.Type):
+        UNKNOWN = (-1, None)
+        DEFAULT = (8, GridTypes)
 
     @classmethod
-    def parse(cls, val):
-        if val == [[8, 205]]:
-            return cls(type_=cls.Type.EXCLUSIVE_COLUMNS)
-        warn(UnknownValidator(cls, val))
-        return cls(type_=cls.Type.UNKNOWN)
+    def _parse_arg_list(cls, args, type_, subtype):
+        # no args are needed.
+        # This method will be called only if args is an empty list (is it possible?)
+        return None, True
 
-    def __init__(self, *, type_):
-        self.type = type_
+    def _validate(self, elem, values: List[List[str]]):
+        if self.subtype is GridTypes.EXCLUSIVE_COLUMNS:
+            cnt = Counter()
+            for row in values:
+                if row:
+                    cnt.update(row)
+                    col, count = max(cnt.items(), key=lambda x: x[1])
+                    if count > 1:
+                        raise SameColumn(elem, col)
+        raise NotImplementedError()
 
-    def validate(self, elem, values: List[List[str]]):
-        if self.type == self.Type.UNKNOWN:
-            return
-        if elem.is_misconfigured():
-            raise MisconfiguredGrid(elem, values)
-        cnt = Counter()
-        for row in values:
-            if row:
-                cnt.update(row)
-                col, count = max(cnt.items(), key=lambda x: x[1])
-                if count > 1:
-                    raise SameColumn(elem, values, col)
 
-    def to_str(self):
-        if self.type == self.Type.EXCLUSIVE_COLUMNS:
-            return '! Max 1 response per column !'
-        return '! Unknown validator !'
+class CheckboxTypes(Subtype):
+    UNKNOWN = (-1, (0, 'Unknown validator'))
+    AT_LEAST = (200, (1, 'at least {} option(s)'))
+    AT_MOST = (201, (1, 'at most {} option(s)'))
+    EXACTLY = (204, (1, 'exactly {} option(s)'))
+
+
+class CheckboxValidator(Validator):
+    class Type(Validator.Type):
+        UNKNOWN = (-1, None)
+        DEFAULT = (7, CheckboxTypes)
+
+    @classmethod
+    def _parse_arg_list(cls, args, type_, subtype):
+        try:
+            return [int(arg) for arg in args], True
+        except ValueError:
+            return args, False
+
+    def _validate(self, elem, values: List[List[str]]):
+        required = self.args[0]
+        cnt = len(values[0])
+        if cast('Checkboxes', elem)._other_value is not None:
+            cnt += 1
+        if self.subtype is CheckboxTypes.AT_LEAST:
+            is_ok = cnt >= required
+        elif self.subtype is CheckboxTypes.AT_MOST:
+            is_ok = cnt <= required
+        elif self.subtype is CheckboxTypes.EXACTLY:
+            is_ok = cnt == required
+        else:
+            raise NotImplementedError()
+        if not is_ok:
+            raise InvalidChoiceCount(self, cnt)
+
+    def _descr(self):
+        return 'Select ' + super()._descr()

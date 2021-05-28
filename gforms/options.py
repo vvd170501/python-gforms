@@ -18,7 +18,6 @@ class Option:
 
         This method should not be called directly,, use options.parse instead.
         """
-
         return cls(**cls._parse(option))
 
     @classmethod
@@ -44,7 +43,6 @@ class Option:
 
         For args description, see Form.to_str.
         """
-
         if self.other:
             if with_value is not None:
                 return f'Other: "{with_value}"'
@@ -74,7 +72,6 @@ class ActionOption(Option):
 
     def to_str(self, indent=0, with_value=None):
         """See base class."""
-
         from .elements import Page
         s = super().to_str(indent, with_value)
         if self.next_page is Page.SUBMIT:
@@ -95,7 +92,6 @@ class ActionOption(Option):
 
 def parse(option):
     """Creates an Option of the right type from its JSON representation."""
-
     if len(option) > Option._Index.ACTION and option[Option._Index.ACTION] is not None:
         return ActionOption.parse(option)
     return Option.parse(option)
