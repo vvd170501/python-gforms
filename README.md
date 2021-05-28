@@ -20,6 +20,8 @@ python3 -m pip install gforms
 
 ## Example
 
+See [example.py](https://github.com/vvd170501/python-gforms/blob/master/example.py) for more details.
+
 ```python3
 from gforms import Form
 from gforms.elements import Short
