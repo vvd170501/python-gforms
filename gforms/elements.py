@@ -19,7 +19,7 @@ from .util import RADIO_SYMBOLS, CHECKBOX_SYMBOLS, add_indent, elem_separator, r
 from .validators import CheckboxValidator, CheckboxTypes
 
 
-__all__ = ['Element', '_Action', 'CallbackRetVal', 'Value',
+__all__ = ['Element', 'CallbackRetVal', 'Value',
            'Page', 'Comment', 'Image', 'Video',
            'Short', 'Paragraph', 'Radio', 'Dropdown', 'Checkboxes', 'Scale',
            'RadioGrid', 'CheckboxGrid',
