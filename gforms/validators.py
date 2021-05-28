@@ -329,7 +329,8 @@ class GridValidator(Validator):
                     col, count = max(cnt.items(), key=lambda x: x[1])
                     if count > 1:
                         raise SameColumn(elem, col)
-        raise NotImplementedError()
+        else:
+            raise NotImplementedError()
 
 
 class CheckboxTypes(Subtype):
