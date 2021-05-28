@@ -15,9 +15,24 @@ setup(
     description='Google Forms wrapper for Python',
     long_description=readme,
     long_description_content_type='text/markdown',
+    author='vvd170501',
     url='https://github.com/vvd170501/python-gforms',
+
+    classifiers=[
+        'Development Status :: 4 - Beta',
+        'License :: OSI Approved :: MIT License',
+        'Programming Language :: Python :: 3 :: Only',
+        'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
+    ],
+
+    packages=['gforms'],
     version=version,
-    packages=find_packages(),
+    license_files=('LICENSE',),
+
+    python_requires='>=3.6',
     install_requires=[
         'beautifulsoup4',
         'requests',
