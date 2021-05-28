@@ -20,7 +20,7 @@ from gforms.errors import ElementTypeError, ElementValueError, RequiredElement, 
     InfiniteLoop, MisconfiguredElement, SameColumn, InvalidChoiceCount
 from gforms.errors import InvalidText
 from gforms.options import Option, ActionOption
-from gforms.validators import GridValidator, GridTypes, Validator, _Subtype, TextValidator, \
+from gforms.validators import GridValidator, GridTypes, Validator, Subtype, TextValidator, \
     CheckboxValidator, NumberTypes, TextTypes, LengthTypes, RegexTypes, CheckboxTypes
 
 # ChoiceInput elements without "Other" option should raise InvalidChoice for empty strings
@@ -154,13 +154,13 @@ class ValidatedTest(ElementTest):
 
     # validator_data = (valid_value, invalid_value, expected_exc_type)
     validators: List[Tuple[
-        Tuple[Validator.Type, _Subtype, Optional[list], Optional[str]],
+        Tuple[Validator.Type, Subtype, Optional[list], Optional[str]],
         List[str], Tuple[ElemValue, ElemValue, Type[Exception]]
     ]]
 
     # validator_data = any_non_empty_value
     misconfigured: List[Tuple[
-        Tuple[Validator.Type, _Subtype, Optional[list], Optional[str]],
+        Tuple[Validator.Type, Subtype, Optional[list], Optional[str]],
         List[str], ElemValue
     ]]
 

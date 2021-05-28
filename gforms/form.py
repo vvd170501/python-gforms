@@ -94,6 +94,9 @@ class Form:
         Returns:
             A (multiline) string representation of this form.
         """
+        if not self._is_loaded:
+            raise FormNotLoaded(self)
+
         if not self._is_filled:
             include_answer = False
 

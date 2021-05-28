@@ -10,7 +10,7 @@ from gforms.errors import FormNotLoaded, FormNotFilled
 from .conftest import BaseFormTest
 
 
-# NOTE will most probably fail if elements aren't parsed correctl
+# NOTE will most probably fail if elements aren't parsed correctly
 # Xfail this class if any test_elements() in 10_load_test fails?
 class TestFill(BaseFormTest):
     """

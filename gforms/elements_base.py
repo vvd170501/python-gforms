@@ -325,9 +325,8 @@ class ChoiceInput(InputElement, ABC):
                 )
         self._set_values(new_choices)
 
-    @abstractmethod
     def _hints(self, indent=0, modify=False):
-        raise NotImplementedError()
+        return []
 
     def _find_option(self, value: ChoiceValue, i):
         if isinstance(value, Option):
@@ -547,7 +546,7 @@ class ValidatedInput(InputElement, ABC):
         res = []
         if self.validator is not None:
             res.append(f'! {self.validator.to_str()} !')
-        return res
+        return res + super(ValidatedInput, self)._hints(indent, modify)
 
     @classmethod
     @abstractmethod

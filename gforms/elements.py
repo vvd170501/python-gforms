@@ -357,9 +357,9 @@ class RadioGrid(Grid):
                 The argument is a list,
                 but its length does not match the number of rows.
         """
-        # NOTE Maybe it's better to allow list of lists with lengths <= 1
-        # grid.set_value([[val1], [], [val3], ...])
-        # instead of grid.set_value([val1, Value.EMPTY, val3, ...])
+        # REL_TODO Maybe it's better to allow list of lists with lengths <= 1
+        #   e.g. grid.set_value([[val1], [], [val3], ...])
+        #   instead of grid.set_value([val1, Value.EMPTY, val3, ...])
         self._set_grid_values(value)
 
 
@@ -538,8 +538,8 @@ class DateTime(DateElement):
 
 
 def _grid_validated_choices(elem: Grid):
-    # NOTE this function will choose maximal allowed number of columns,
-    # even if required is False (find a better solution or disable this feature entirely?)
+    # REL_TODO this function will choose maximal allowed number of columns,
+    #   even if required is False (find a better solution or disable this feature entirely?)
 
     n = len(elem.rows)
     if isinstance(elem, RadioGrid):

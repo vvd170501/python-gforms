@@ -1,8 +1,7 @@
 import re
 from abc import ABC, abstractmethod
 from collections import Counter
-from enum import Enum, auto
-from typing import TYPE_CHECKING, List, Union, cast
+from typing import TYPE_CHECKING, List, cast
 from warnings import warn
 
 from .errors import SameColumn, UnknownValidator, InvalidText, InvalidArguments, InvalidChoiceCount
@@ -12,7 +11,7 @@ if TYPE_CHECKING:
     from elements import Checkboxes
 
 
-class _Subtype(DefaultEnum, ArgEnum):
+class Subtype(DefaultEnum, ArgEnum):
     # Add UNKNOWN dynamically?
 
     @property
@@ -79,13 +78,18 @@ class Validator(ABC):
 
     def __init__(self, type_, subtype, args, bad_args, error_msg):
         self.type = type_
-        self.subtype: _Subtype = subtype
+        self.subtype: Subtype = subtype
         self.args = args
         self.error_msg = error_msg
         self.bad_args = bad_args
 
     def validate(self, elem):
         """Validates the element's value."""
+        # REL_TODO alternative variant:
+        #   validate(self, values) -> Optional[Tuple[Type[Exception], Any]]
+        #   Return exception class and args, create and raise the exception in element's validate()
+        #   In this case, validator is less dependent on element implementation details.
+        #   Also, validator testing should be easier.
         if self.has_unknown_type() or self.bad_args:
             return
         self._validate(elem, elem._values)
@@ -131,7 +135,7 @@ class Validator(ABC):
         raise NotImplementedError()
 
 
-class NumberTypes(_Subtype):
+class NumberTypes(Subtype):
     UNKNOWN = (-1, (0, 'Unknown validator'))
     GT = (1, (1, 'Number > {}'))
     GE = (2, (1, 'Number >= {}'))
@@ -145,7 +149,7 @@ class NumberTypes(_Subtype):
     IS_INT = (10, (0, 'An integer'))
 
 
-class TextTypes(_Subtype):
+class TextTypes(Subtype):
     UNKNOWN = (-1, (0, 'Unknown validator'))
     CONTAINS = (100, (1, 'Must contain "{}"'))
     NOT_CONTAINS = (101, (1, 'Must not contain "{}"'))
@@ -153,13 +157,13 @@ class TextTypes(_Subtype):
     URL = (103, (0, 'URL'))
 
 
-class LengthTypes(_Subtype):
+class LengthTypes(Subtype):
     UNKNOWN = (-1, (0, 'Unknown validator'))
     MAX_LENGTH = (202, (1, 'Max {} characters'))
     MIN_LENGTH = (203, (1, 'Min {} characters'))
 
 
-class RegexTypes(_Subtype):
+class RegexTypes(Subtype):
     UNKNOWN = (-1, (0, 'Unknown validator'))
     CONTAINS = (299, (1, 'Must contain regex "{}"'))
     NOT_CONTAINS = (300, (1, 'Must not contain regex "{}"'))
@@ -211,15 +215,16 @@ class TextValidator(Validator):
         if not values[0]:  # empty element
             return
         value = values[0][0]
-        is_ok = False
         if self.type is self.Type.NUMBER:
             is_ok = self._validate_number(value)
-        if self.type is self.Type.TEXT:
+        elif self.type is self.Type.TEXT:
             is_ok = self._validate_text(value)
-        if self.type is self.Type.LENGTH:
+        elif self.type is self.Type.LENGTH:
             is_ok = self._validate_length(value)
-        if self.type is self.Type.REGEX:
+        elif self.type is self.Type.REGEX:
             is_ok = self._validate_regex(value)
+        else:
+            raise NotImplementedError()
         if not is_ok:
             descr = self._descr()
             if self.error_msg:
@@ -264,6 +269,7 @@ class TextValidator(Validator):
         if self.subtype is NumberTypes.NOT_RANGE:
             # The first arg can be greater than the second, it's ok
             return val < min(self.args) or val > max(self.args)
+        raise NotImplementedError()
 
     def _validate_text(self, val):
         if self.subtype is TextTypes.CONTAINS:
@@ -277,12 +283,14 @@ class TextValidator(Validator):
             # It seems that URLS are validaetd on the server side
             # (client performs only basic checks)
             return URL_REGEX.match(val) is not None
+        raise NotImplementedError()
 
     def _validate_length(self, val):
         if self.subtype is LengthTypes.MIN_LENGTH:
             return len(val) >= self.args[0]
         if self.subtype is LengthTypes.MAX_LENGTH:
             return len(val) <= self.args[0]
+        raise NotImplementedError()
 
     def _validate_regex(self, val):
         if self.subtype is RegexTypes.CONTAINS:
@@ -293,9 +301,10 @@ class TextValidator(Validator):
             return self.args[0].match(val) is not None
         if self.subtype is RegexTypes.NOT_MATCHES:
             return self.args[0].match(val) is None
+        raise NotImplementedError()
 
 
-class GridTypes(_Subtype):
+class GridTypes(Subtype):
     UNKNOWN = (-1, (0, 'Unknown validator'))
     EXCLUSIVE_COLUMNS = (205, (0, 'Max 1 response per column'))
 
@@ -320,9 +329,10 @@ class GridValidator(Validator):
                     col, count = max(cnt.items(), key=lambda x: x[1])
                     if count > 1:
                         raise SameColumn(elem, col)
+        raise NotImplementedError()
 
 
-class CheckboxTypes(_Subtype):
+class CheckboxTypes(Subtype):
     UNKNOWN = (-1, (0, 'Unknown validator'))
     AT_LEAST = (200, (1, 'at least {} option(s)'))
     AT_MOST = (201, (1, 'at most {} option(s)'))
@@ -346,13 +356,14 @@ class CheckboxValidator(Validator):
         cnt = len(values[0])
         if cast('Checkboxes', elem)._other_value is not None:
             cnt += 1
-        is_ok = False
         if self.subtype is CheckboxTypes.AT_LEAST:
             is_ok = cnt >= required
-        if self.subtype is CheckboxTypes.AT_MOST:
+        elif self.subtype is CheckboxTypes.AT_MOST:
             is_ok = cnt <= required
-        if self.subtype is CheckboxTypes.EXACTLY:
+        elif self.subtype is CheckboxTypes.EXACTLY:
             is_ok = cnt == required
+        else:
+            raise NotImplementedError()
         if not is_ok:
             raise InvalidChoiceCount(self, cnt)
 
