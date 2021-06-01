@@ -8,7 +8,7 @@ from .elements_base import _Action, Value, MultiChoiceInput
 from .elements_base import Element, MediaElement, InputElement, \
                            ActionChoiceInput, ChoiceInput, ChoiceInput1D, \
                            OtherChoiceInput, ValidatedInput, TextInput, \
-                           DateElement, Grid, TimeElement
+                           DateInput, Grid, TimeInput
 from .elements_base import ChoiceValue, EmptyValue, MultiChoiceValue, TextValue, \
                            GridChoiceValue, GridMultiChoiceValue
 
@@ -357,9 +357,6 @@ class RadioGrid(Grid):
                 The argument is a list,
                 but its length does not match the number of rows.
         """
-        # REL_TODO Maybe it's better to allow list of lists with lengths <= 1
-        #   e.g. grid.set_value([[val1], [], [val3], ...])
-        #   instead of grid.set_value([val1, Value.EMPTY, val3, ...])
         self._set_grid_values(value)
 
 
@@ -385,7 +382,7 @@ class CheckboxGrid(Grid, MultiChoiceInput):
         self._set_grid_values(value)
 
 
-class Time(TimeElement):
+class Time(TimeInput):
     def set_value(self, value: Union[TimeValue, EmptyValue]):
         """Sets the value for this element.
 
@@ -410,7 +407,7 @@ class Time(TimeElement):
         return [f'{self._hour:02}:{self._minute:02}']
 
 
-class Duration(TimeElement):
+class Duration(TimeInput):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._timedelta = None
@@ -456,7 +453,7 @@ class Duration(TimeElement):
         return [f'{h:02}:{m:02}:{s:02}']
 
 
-class Date(DateElement):
+class Date(DateInput):
     def set_value(self, value: Union[DateValue, EmptyValue]):
         """Sets the value for this element.
 
@@ -477,7 +474,7 @@ class Date(DateElement):
             raise ElementTypeError(self, value)
 
 
-class DateTime(DateElement):
+class DateTime(DateInput):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._time = None
@@ -596,7 +593,11 @@ def _validated_choices(elem):
 
 
 def default_callback(elem: InputElement, page_index, elem_index) -> Union[ElemValue, EmptyValue]:
-    """The default callback implementation for Form.fill."""
+    """The default callback implementation for Form.fill.
+
+    This callback will raise a NotImplementedError
+    if it is called on a TextInput, DateInput or a TimeInput.
+    """
 
     # Single choice inputs
     if isinstance(elem, Scale) or isinstance(elem, Dropdown) or isinstance(elem, Radio):
@@ -664,9 +665,9 @@ def parse(elem):
     if el_type is Element.Type.GRID:
         cls = CheckboxGrid if Grid.parse_multichoice(elem) else RadioGrid
     elif el_type is Element.Type.DATE:
-        cls = DateTime if DateElement.parse_time_flag(elem) else Date
+        cls = DateTime if DateInput.parse_time_flag(elem) else Date
     elif el_type is Element.Type.TIME:
-        cls = Duration if TimeElement.parse_duration_flag(elem) else Time
+        cls = Duration if TimeInput.parse_duration_flag(elem) else Time
     else:
         cls = _element_mapping[el_type]
     return cls.parse(elem)

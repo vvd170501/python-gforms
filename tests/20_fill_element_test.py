@@ -7,7 +7,7 @@ import pytest
 
 from gforms import Form
 from gforms.elements_base import _Action, Element, InputElement, ChoiceInput, ActionChoiceInput, \
-    Grid, DateElement, TextInput, ValidatedInput
+    Grid, DateInput, TextInput, ValidatedInput
 from gforms.elements import Value, CheckboxGridValue, ElemValue
 from gforms.elements import Short, Paragraph
 from gforms.elements import Checkboxes, Dropdown, Radio, Scale
@@ -688,7 +688,7 @@ class TestCheckboxGrid(GridTest):
 
 
 class DateTest(SingleEntryTest):
-    elem_type: Type[DateElement]
+    elem_type: Type[DateInput]
 
     @pytest.fixture(autouse=True)
     def add_has_year(self, kwargs):

@@ -656,7 +656,7 @@ class Grid(ValidatedInput, ChoiceInput):
             raise RequiredRow(self, index=e.index)
 
 
-class TimeElement(SingleInput):
+class TimeInput(SingleInput):
     """An element which represents a time or a duration."""
 
     class _Index(SingleInput._Index):
@@ -665,8 +665,8 @@ class TimeElement(SingleInput):
 
     @staticmethod
     def parse_duration_flag(elem):
-        flags = TimeElement._get_entry(elem)[TimeElement._Index.FLAGS]
-        return bool(flags[TimeElement._Index.DURATION])
+        flags = TimeInput._get_entry(elem)[TimeInput._Index.FLAGS]
+        return bool(flags[TimeInput._Index.DURATION])
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -709,7 +709,7 @@ class TimeElement(SingleInput):
         return all(val is None for val in [self._hour, self._minute, self._second])
 
 
-class DateElement(SingleInput):
+class DateInput(SingleInput):
     """An element which represents a date.
 
     Attributes:
@@ -723,8 +723,8 @@ class DateElement(SingleInput):
 
     @staticmethod
     def parse_time_flag(elem):
-        flags = DateElement._get_entry(elem)[DateElement._Index.FLAGS]
-        return bool(flags[DateElement._Index.TIME])
+        flags = DateInput._get_entry(elem)[DateInput._Index.FLAGS]
+        return bool(flags[DateInput._Index.TIME])
 
     @classmethod
     def _parse(cls, elem):
