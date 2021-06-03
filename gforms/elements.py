@@ -217,7 +217,7 @@ class Short(TextInput):
             return
         value = self._value[0]
         if '\n' in value:
-            raise InvalidText(self, value.replace('\n', r'\n'), 'Input contains newlines')
+            raise InvalidText(self, value.replace('\n', r'\n'), details='Input contains newlines')
 
 
 class Paragraph(TextInput):

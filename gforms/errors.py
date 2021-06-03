@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 class FormsError(Exception, ABC):
     """Base error class"""
 
-    def __init__(self, *args, details=None):
+    def __init__(self, *, details=None):
         super().__init__()
         self.details = details
 
@@ -52,7 +52,7 @@ class ElementError(FormsError):
         self.index = index
 
 
-class InfiniteLoop(FormsError, ValueError):
+class InfiniteLoop(FormError, ValueError):
     def __init__(self, form):
         super().__init__(form)
 

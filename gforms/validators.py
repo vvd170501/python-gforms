@@ -366,7 +366,7 @@ class CheckboxValidator(Validator):
         else:
             raise NotImplementedError()
         if not is_ok:
-            raise InvalidChoiceCount(self, cnt)
+            raise InvalidChoiceCount(elem, cnt)
 
     def _descr(self):
         return 'Select ' + super()._descr()
