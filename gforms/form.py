@@ -327,6 +327,8 @@ class Form:
         scripts = soup.find_all('script')
         pattern = re.compile(r'FB_PUBLIC_LOAD_DATA_ = (\[.+\])\n;', re.S)
         for script in scripts:
+            if script.string is None:
+                continue
             match = pattern.search(script.string)
             if match:
                 return json.loads(match.group(1))
