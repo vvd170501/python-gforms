@@ -1,21 +1,133 @@
 import json
 import re
+from enum import Enum
 from typing import Callable, Optional, List
 
 import requests
 from bs4 import BeautifulSoup
 
 from .elements_base import InputElement
-from .elements import _Action, Element, Page, Value, parse as parse_element
+from .elements import _Action, Element, Page, UserEmail, Value, parse as parse_element, Short
 from .elements import CallbackRetVal, default_callback
 from .errors import ClosedForm, InfiniteLoop, ParseError, FormNotLoaded, FormNotFilled
 from .util import add_indent, page_separator
-
 
 # based on https://gist.github.com/gcampfield/cb56f05e71c60977ed9917de677f919c
 
 
 CallbackType = Callable[[InputElement, int, int], CallbackRetVal]
+
+
+class Settings:
+    """Settings for a form.
+
+    Attributes:
+        collect_emails: Self-explanatory.
+        send_receipt: Send a copy of user's responses to their e-mail address.
+            If this value is SendReceipt.ALWAYS or the user opts in
+            to receive the receipt, a captcha will be required
+            to submit the form.
+            NOTE Captcha handling is not implemented.
+        signin_required: When Ture, the user must use a google account
+            to submit this form. Only one response can be submitted.
+        show_summary: Whether the user is allowed to view response stats.
+        edit_responses: Self-explanatory.
+        show_progressbar: Self-explanatory.
+        shuffle_questions: Self-explanatory.
+            It seems that the order of parsed questions isn't affected.
+            However, shuffle_options on elements actually shuffles the options.
+        show_resubmit_link: Self-explanatory.
+        confirmation_msg:
+            The message which is shown after a successful submission.
+        is_quiz: Self-explanatory.
+        immediate_grades: The user may view their grades immediately.
+        show_missed: "Identify which questions were answered incorrectly"
+            (from the form creation page).
+        show_correct_answers: Self-explanatory.
+        show_points: Self-explanatory.
+    """
+
+    class _Index:
+        FIRST_BLOCK = 2
+        SECOND_BLOCK = 10
+        QUIZ_BLOCK = 16
+
+        # First block
+        CONFIRMATION_MSG = 0
+        SHOW_RESUBMIT_LINK = 1
+        SHOW_SUMMARY = 2  # TODO add properties for links? (this and resubmit)
+        EDIT_RESPONSES = 3  # !!!
+        # Second block. The first 4 elements may be None
+        SHOW_PROGRESSBAR = 0
+        SIGNIN_REQUIRED = 1
+        SHUFFLE_QUESTIONS = 2
+        RECEIPT = 3
+        COLLECT_EMAILS = 4
+        # Quiz block
+        # It's possible to create a form with IMMEDIATE_GRADES ==  COLLECT_EMAILS == 0
+        GRADES_SETTINGS = 0
+        SHOW_MISSED = 2
+        SHOW_CORRECT = 3
+        SHOW_POINTS = 4
+        IMMEDIATE_GRADES = 1
+        IS_QUIZ = 2
+
+    class SendReceipt(Enum):
+        # NOTE Captcha is required to send a receipt
+        UNUSED = None  # value is None when collect_emails is False
+        OPT_IN = 1
+        NEVER = 2
+        ALWAYS = 3
+
+    def parse(self, form_data):
+        # any block may be missing
+        first_block = form_data[self._Index.FIRST_BLOCK]
+        second_block = form_data[self._Index.SECOND_BLOCK]
+        quiz = form_data[self._Index.QUIZ_BLOCK]\
+            if len(form_data) > self._Index.QUIZ_BLOCK else None
+
+        if first_block is not None:
+            self.confirmation_msg = first_block[self._Index.CONFIRMATION_MSG] or None
+            self.show_resubmit_link = bool(first_block[self._Index.SHOW_RESUBMIT_LINK])
+            self.show_summary = bool(first_block[self._Index.SHOW_SUMMARY])
+            self.edit_responses = bool(first_block[self._Index.EDIT_RESPONSES])
+        if second_block is not None:
+            self.show_progressbar = bool(second_block[self._Index.SHOW_PROGRESSBAR])
+            self.signin_required = bool(second_block[self._Index.SIGNIN_REQUIRED])
+            self.shuffle_questions = bool(second_block[self._Index.SHUFFLE_QUESTIONS])
+            self.send_receipt = self.SendReceipt(second_block[self._Index.RECEIPT])
+            self.collect_emails = bool(second_block[self._Index.COLLECT_EMAILS])
+        if quiz is not None and len(quiz) > self._Index.IS_QUIZ:
+            self.is_quiz = bool(quiz[self._Index.IS_QUIZ])
+        if self.is_quiz:
+            self.immediate_grades = bool(quiz[self._Index.IMMEDIATE_GRADES])
+            grades_settings = quiz[self._Index.IMMEDIATE_GRADES]
+            self.show_missed = bool(grades_settings[self._Index.SHOW_MISSED])
+            self.show_correct_answers = bool(grades_settings[self._Index.SHOW_CORRECT])
+            self.show_points = bool(grades_settings[self._Index.SHOW_POINTS])
+
+    def __init__(self):
+        """Initializes all settings with a default value."""
+        self.collect_emails = False
+        self.send_receipt = self.SendReceipt.UNUSED
+
+        self.signin_required = False
+
+        self.show_summary = False
+        self.edit_responses = False
+
+        self.show_progressbar = False
+        self.shuffle_questions = False
+        self.show_resubmit_link = True
+
+        self.confirmation_msg: Optional[str] = None
+
+        self.is_quiz = False
+        self.immediate_grades = True
+
+        self.show_missed = True
+        self.show_correct_answers = True
+        self.show_points = True
 
 
 class Form:
@@ -27,16 +139,23 @@ class Form:
         title: Title of the form.
         description: Description of the form.
         pages: List of form pages.
+        settings: The form settings.
+        is_loaded: Indicates if this form was properly loaded and parsed.
+        is_filled:
+            Indicates if this form was successfully filled and may be submitted.
     """
 
-    class _Index:
+    class _DocIndex:
         FORM = 1
+        NAME = 3
+        URL = 14  # Unused. Is the index constant?
+        SIGNIN_REQUIRED = 18  # Duplicate or has other meaning?
+
+    class _FormIndex:
         DESCRIPTION = 0
         ELEMENTS = 1
+        STYLE = 4  # Not implemented
         TITLE = 8
-        COLLECT_EMAILS = 10
-        NAME = 3  # top-level
-        URL = 14  # top-level, index may change?
 
     def __init__(self, url):
         self.url = url
@@ -47,8 +166,9 @@ class Form:
         self.title = None
         self.description = None
         self.pages = None
-        self._is_loaded = False
-        self._is_filled = False
+        self.settings = Settings()
+        self.is_loaded = False
+        self.is_filled = False
 
     def load(self, http: Optional[requests.Session] = None):
         """Loads and parses the form.
@@ -65,9 +185,10 @@ class Form:
         if http is None:
             http = requests
 
+        # TODO!! prefilled links
         # load() may fail, in this case form data will be inconsistent
-        self._is_loaded = False
-        self._is_filled = False
+        self.is_loaded = False
+        self.is_filled = False
 
         page = http.get(self.url)
         soup = BeautifulSoup(page.text, 'html.parser')
@@ -82,7 +203,7 @@ class Form:
         if data is None or any(value is None for value in [self._fbzx, self._history, self._draft]):
             raise ParseError(self)
         self._parse(data)
-        self._is_loaded = True
+        self.is_loaded = True
 
     def to_str(self, indent=0, include_answer=False):
         """Returns a text representation of the form.
@@ -95,10 +216,10 @@ class Form:
         Returns:
             A (multiline) string representation of this form.
         """
-        if not self._is_loaded:
+        if not self.is_loaded:
             raise FormNotLoaded(self)
 
-        if not self._is_filled:
+        if not self.is_filled:
             include_answer = False
 
         if self.description:
@@ -117,10 +238,10 @@ class Form:
         return f'{title}\n{lines}'
 
     def fill(
-                self,
-                callback: Optional[CallbackType] = None,
-                fill_optional=False
-            ):
+            self,
+            callback: Optional[CallbackType] = None,
+            fill_optional=False
+    ):
         """Fills the form using values returned by the callback.
 
         If callback is None, the default callback (see below) is used.
@@ -150,9 +271,9 @@ class Form:
                 because the page transitions form an infinite loop.
             NotImplementedError: The default callback was used for an unsupported element.
         """
-        if not self._is_loaded:
+        if not self.is_loaded:
             raise FormNotLoaded(self)
-        self._is_filled = False
+        self.is_filled = False
 
         page = self.pages[0]
         pages_to_submit = {page}
@@ -183,13 +304,16 @@ class Form:
                 # These cases are not detected (add a separate public method?)
                 raise InfiniteLoop(self)
             pages_to_submit.add(page)
-        self._is_filled = True
+        self.is_filled = True
 
-    def submit(self, http=None, emulate_history=False) -> List[requests.models.Response]:
+    def submit(self, http=None, need_receipt=False, emulate_history=False) -> List[requests.models.Response]:
         """Submits the form.
 
         Args:
             http: see Form.load
+            need_receipt:
+                Effective only if settings.send_receipt is SendReceipt.OPT_IN
+                If True, will throw NotImplementedError.
             emulate_history: (Experimental)
                 Use only one request for submitting the form.
                 For single-page forms the behavior is unchanged.
@@ -205,8 +329,19 @@ class Form:
                 or a http(s) response with an incorrect code was received.
             gforms.errors.ClosedForm: The form is closed.
         """
-        if not self._is_filled:
+        if not self.is_filled:
             raise FormNotFilled(self)
+
+        if self.settings.signin_required:
+            # TODO auth?
+            raise NotImplementedError('A Google account is required to submit this form')
+
+        if self.settings.send_receipt is not Settings.SendReceipt.OPT_IN:
+            need_receipt = self.settings.send_receipt is Settings.SendReceipt.ALWAYS
+
+        if need_receipt:
+            # TODO is it possible to use a callback?
+            raise NotImplementedError('Need to solve a captcha to submit the form')
 
         if http is None:
             http = requests
@@ -238,17 +373,23 @@ class Form:
         return res
 
     def _parse(self, data):
-        self.name = data[self._Index.NAME]
-        form = data[self._Index.FORM]
-        self.title = form[self._Index.TITLE]
+        self.name = data[self._DocIndex.NAME]
+        form = data[self._DocIndex.FORM]
+        self.title = form[self._FormIndex.TITLE]
         if not self.title:
             self.title = self.name
-        self.description = form[self._Index.DESCRIPTION]
-        self.pages = [Page.first()]
+        self.description = form[self._FormIndex.DESCRIPTION]
 
-        if form[self._Index.ELEMENTS] is None:
+        self.settings.parse(form)
+
+        self.pages = [Page.first()]
+        if self.settings.collect_emails:
+            # Not a real element, but is displayed like one
+            self._email_input = UserEmail()
+            self.pages[0].append(self._email_input)
+        if form[self._FormIndex.ELEMENTS] is None:
             return
-        for elem in form[self._Index.ELEMENTS]:
+        for elem in form[self._FormIndex.ELEMENTS]:
             el_type = Element.Type(elem[Element._Index.TYPE])
             if el_type == Element.Type.PAGE:
                 self.pages.append(Page.parse(elem).with_index(len(self.pages)))
@@ -272,6 +413,12 @@ class Form:
         # For some unfilled elements, draft values should be [""],
         # but if the corresponding entries are not included into the draft,
         # the form is still accepted
+
+        if self.settings.collect_emails:
+            if len(draft) < 8:
+                draft += [None] * (8 - len(draft))
+            draft[6] = self._email_input._value[0]
+            draft[7] = 1  # ??
 
         while True:
             next_page = last_page.next_page()

@@ -123,7 +123,6 @@ class InputElement(Element, ABC):
     class _Index(Element._Index):
         ENTRIES = 4
         ENTRY_ID = 0
-        OPTIONS = 1
         REQUIRED = 2
 
     @classmethod
@@ -287,6 +286,10 @@ class ChoiceInput(InputElement, ABC):
     Attributes:
         options: A list of allowed choices for this element.
     """
+
+    class _Index(InputElement._Index):
+        OPTIONS = 1
+        SHUFFLE_OPTIONS = 8  # !!
 
     # This class is basically the same as CheckboxGrid
     _has_multichoice = False
@@ -546,7 +549,7 @@ class ValidatedInput(InputElement, ABC):
         res = []
         if self.validator is not None:
             res.append(f'! {self.validator.to_str()} !')
-        return res + super(ValidatedInput, self)._hints(indent, modify)
+        return res + super()._hints(indent, modify)
 
     @classmethod
     @abstractmethod
@@ -565,11 +568,14 @@ class Grid(ValidatedInput, ChoiceInput):
     Attributes:
         rows: The grid row names.
         cols: The grid columns (an alias for options).
+        shuffle_rows: Shuffle this grid's rows
+            (see Form.Settings.shuffle_questions)
     """
 
     _cell_symbols = ('?', '+')
 
-    class _Index(InputElement._Index):
+    class _Index(ChoiceInput._Index):
+        SHUFFLE_ROWS = 7  # !!
         VALIDATOR = 8
         ROW_NAME = 3
         MULTICHOICE = 11
