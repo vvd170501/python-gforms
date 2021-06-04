@@ -32,8 +32,9 @@ class Form:
     class _Index:
         FORM = 1
         DESCRIPTION = 0
-        FIELDS = 1
+        ELEMENTS = 1
         TITLE = 8
+        COLLECT_EMAILS = 10
         NAME = 3  # top-level
         URL = 14  # top-level, index may change?
 
@@ -245,9 +246,9 @@ class Form:
         self.description = form[self._Index.DESCRIPTION]
         self.pages = [Page.first()]
 
-        if form[self._Index.FIELDS] is None:
+        if form[self._Index.ELEMENTS] is None:
             return
-        for elem in form[self._Index.FIELDS]:
+        for elem in form[self._Index.ELEMENTS]:
             el_type = Element.Type(elem[Element._Index.TYPE])
             if el_type == Element.Type.PAGE:
                 self.pages.append(Page.parse(elem).with_index(len(self.pages)))
@@ -324,11 +325,9 @@ class Form:
     @staticmethod
     def _raw_form(soup):
         scripts = soup.find_all('script')
-        if len(scripts) < 4:
-            return None
         pattern = re.compile(r'FB_PUBLIC_LOAD_DATA_ = (\[.+\])\n;', re.S)
-        match = pattern.search(scripts[3].string)
-        if match is None:
-            return None
-        data = json.loads(match.group(1))
-        return data
+        for script in scripts:
+            match = pattern.search(script.string)
+            if match:
+                return json.loads(match.group(1))
+        return None
