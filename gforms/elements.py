@@ -20,7 +20,7 @@ from .validators import CheckboxValidator, CheckboxTypes
 
 
 __all__ = ['Element', 'CallbackRetVal', 'Value',
-           'Page', 'Comment', 'Image', 'Video',
+           'UserEmail', 'Page', 'Comment', 'Image', 'Video',
            'Short', 'Paragraph', 'Radio', 'Dropdown', 'Checkboxes', 'Scale',
            'RadioGrid', 'CheckboxGrid',
            'Time', 'Duration', 'Date', 'DateTime',
@@ -218,6 +218,36 @@ class Short(TextInput):
         value = self._value[0]
         if '\n' in value:
             raise InvalidText(self, value.replace('\n', r'\n'), details='Input contains newlines')
+
+
+class UserEmail(Short):
+    """A virtual element used for e-mail collection."""
+    def __init__(self):
+        from .validators import TextValidator, TextTypes
+        val = TextValidator(type_=TextValidator.Type.TEXT, subtype=TextTypes.EMAIL,
+                            error_msg='', args=None, bad_args=False)
+        super().__init__(
+            id_=-9999,
+            name='Email',
+            description='Your email',
+            type_=Element.Type.SHORT,
+            entry_ids=[-999],
+            required=True,
+            validator=val
+        )
+
+    def _hints(self, indent=0, modify=False):
+        # Don't include the validator hint
+        from .elements_base import ValidatedInput
+        return super(ValidatedInput, self)._hints(indent, modify)
+
+    def payload(self):
+        """See base class."""
+        return {'emailAddress': self._value}
+
+    def draft(self):
+        """Returns empty list for Page.draft."""
+        return []
 
 
 class Paragraph(TextInput):
@@ -596,7 +626,7 @@ def default_callback(elem: InputElement, page_index, elem_index) -> Union[ElemVa
     """The default callback implementation for Form.fill.
 
     This callback will raise a NotImplementedError
-    if it is called on a TextInput, DateInput or a TimeInput.
+    if it is called on a TextInput, DateInput or a TimeInput.call
     """
 
     # Single choice inputs

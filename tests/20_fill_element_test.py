@@ -805,7 +805,7 @@ class TestTransitions:
         form = Form('')
         form.pages = pages
         form._resolve_actions()
-        form._is_loaded = True
+        form.is_loaded = True
         return form
 
     def test_single_element(self, form):
