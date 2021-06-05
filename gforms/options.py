@@ -1,3 +1,6 @@
+from .util import list_get
+
+
 class Option:
     """A choice option for a ChoiceInput.
 
@@ -22,17 +25,10 @@ class Option:
 
     @classmethod
     def _parse(cls, option):
-        res = {
-            'value': option[cls._Index.VALUE],
-            'other': False,
+        return {
+            'value': option[cls._Index.VALUE] or '',
+            'other': bool(list_get(option, cls._Index.OTHER, False)),
         }
-        # len(option) == 1 for Scale options or if the element has only one option with no actions
-        if len(option) > cls._Index.OTHER:
-            res.update({
-                'other': bool(option[cls._Index.OTHER]),
-                'value': res['value'] or ''
-            })
-        return res
 
     def __init__(self, *, value, other):
         self.value = value

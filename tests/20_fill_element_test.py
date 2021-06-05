@@ -353,6 +353,7 @@ class ChoiceTest1D(SingleEntryTest, ChoiceTest):
     @pytest.fixture(autouse=True)
     def add_options(self, kwargs, options):
         kwargs['options'] = [options]
+        kwargs['shuffle_options'] = False
 
     def test_choice(self, element, get_choice):
         self.check_value(element, get_choice(element.options[0]), [element.options[0].value])
@@ -560,6 +561,7 @@ class GridTest(ValidatedTest, ChoiceTest):
     @pytest.fixture(autouse=True)
     def add_rows(self, kwargs):
         kwargs['rows'] = [f'Row{i}' for i in range(1, self.row_count + 1)]
+        kwargs['shuffle_rows'] = False
 
     @pytest.fixture
     def options(self):
@@ -778,7 +780,8 @@ class TestTransitions:
             name='Test dropdown', description=None, type_=Element.Type.DROPDOWN,
             entry_ids=[entry_id],  # actually doesn't matter
             required=False,
-            options=[options]
+            options=[options],
+            shuffle_options=False,
         )
 
     @staticmethod

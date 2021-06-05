@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from enum import Enum, auto
 from typing import Dict, List, Literal, Union, cast, Any, Optional, Tuple
 
+from .util import list_get
 from .validators import Validator, GridValidator, TextValidator, GridTypes, NumberTypes
 from .errors import DuplicateOther, EmptyOther, InvalidChoice, \
     ElementTypeError, ElementValueError, RequiredElement, RequiredRow, RowTypeError, \
@@ -289,7 +290,6 @@ class ChoiceInput(InputElement, ABC):
 
     class _Index(InputElement._Index):
         OPTIONS = 1
-        SHUFFLE_OPTIONS = 8  # !!
 
     # This class is basically the same as CheckboxGrid
     _has_multichoice = False
@@ -372,10 +372,30 @@ class MultiChoiceInput(ChoiceInput):
 
 
 class ChoiceInput1D(ChoiceInput, SingleInput):
-    """A ChoiceInput with a single entry."""
+    """A ChoiceInput with a single entry.
+
+    Attributes:
+        shuffle_options: Self-explanatory..
+    """
 
     # ChoiceInput1D == Checkboxes without "other"
     _choice_symbols = ('·', '>')
+
+    class _Index(ChoiceInput._Index):
+        SHUFFLE_OPTIONS = 8  # Does not affect Scale
+
+    @classmethod
+    def _parse(cls, elem):
+        res = super()._parse(elem)
+        res.update({
+            'shuffle_options': bool(list_get(cls._get_entry(elem), cls._Index.SHUFFLE_OPTIONS, False)),
+        })
+        return res
+
+    def __init__(self, *, shuffle_options, **kwargs):
+        super().__init__(**kwargs)
+        self.shuffle_options = shuffle_options
+
 
     @property
     def options(self):
@@ -568,14 +588,13 @@ class Grid(ValidatedInput, ChoiceInput):
     Attributes:
         rows: The grid row names.
         cols: The grid columns (an alias for options).
-        shuffle_rows: Shuffle this grid's rows
-            (see Form.Settings.shuffle_questions)
+        shuffle_rows: Shuffle this grid's rows.
     """
 
     _cell_symbols = ('?', '+')
 
     class _Index(ChoiceInput._Index):
-        SHUFFLE_ROWS = 7  # !!
+        SHUFFLE_ROWS = 7
         VALIDATOR = 8
         ROW_NAME = 3
         MULTICHOICE = 11
@@ -588,7 +607,8 @@ class Grid(ValidatedInput, ChoiceInput):
     def _parse(cls, elem):
         res = super()._parse(elem)
         res.update({
-            'rows': [entry[cls._Index.ROW_NAME][0] for entry in cls._get_entries(elem)]
+            'rows': [entry[cls._Index.ROW_NAME][0] for entry in cls._get_entries(elem)],
+            'shuffle_rows': bool(list_get(elem, cls._Index.SHUFFLE_ROWS, False)),
         })
         return res
 
@@ -598,10 +618,11 @@ class Grid(ValidatedInput, ChoiceInput):
             return GridValidator.parse(elem[cls._Index.VALIDATOR][0])
         return None
 
-    def __init__(self, *, rows, **kwargs):
+    def __init__(self, *, rows, shuffle_rows, **kwargs):
         super().__init__(**kwargs)
         self.rows = rows
         self.cols = self.options  # alias
+        self.shuffle_rows = shuffle_rows
 
     @property
     def options(self):
