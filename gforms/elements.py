@@ -221,16 +221,20 @@ class Short(TextInput):
 
 class UserEmail(Short):
     """A virtual element used for e-mail collection."""
+
+    ID = -9999
+    ENTRY_ID = -999
+
     def __init__(self):
         from .validators import TextValidator, TextTypes
         val = TextValidator(type_=TextValidator.Type.TEXT, subtype=TextTypes.EMAIL,
                             error_msg='', args=None, bad_args=False)
         super().__init__(
-            id_=-9999,
+            id_=self.ID,
             name='Email',
             description='Your email',
             type_=Element.Type.SHORT,
-            entry_ids=[-999],
+            entry_ids=[self.ENTRY_ID],
             required=True,
             validator=val
         )
