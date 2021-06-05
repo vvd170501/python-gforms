@@ -212,6 +212,12 @@ class InputElement(Element, ABC):
                 ))
         return result
 
+    def prefill(self, prefilled_data: Dict[str, List[str]]):
+        """Fills the element with values from the prefilled link."""
+        for i, entry_id in enumerate(self._entry_ids):
+            if entry_id in prefilled_data:
+                self._values[i] = prefilled_data[entry_id]
+
     @staticmethod
     def _submit_id(entry_id):
         return f'entry.{entry_id}'

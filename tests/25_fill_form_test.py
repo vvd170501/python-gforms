@@ -62,12 +62,12 @@ class TestFill(BaseFormTest):
 
 class TestUninitialized:
     def test_fill_not_loaded(self):
-        form = Form('...')
+        form = Form()
         with pytest.raises(FormNotLoaded):
             form.fill()
 
     def test_submit_not_filled(self):
-        form = Form('...')
+        form = Form()
         with pytest.raises(FormNotFilled):
             form.submit()
 

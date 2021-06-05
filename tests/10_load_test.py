@@ -374,3 +374,6 @@ class TestCheckboxValidators(ElementTest):
             assert validator.subtype is expected
             assert validator.args == [2]
             assert validator.error_msg == 'Err_msg'
+
+
+# TODO add tests for form settings and row/option shuffling

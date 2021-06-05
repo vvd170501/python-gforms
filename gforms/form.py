@@ -2,14 +2,15 @@ import json
 import re
 from enum import Enum
 from typing import Callable, Optional, List
+from urllib.parse import urlsplit, urlunsplit, parse_qs
 
 import requests
 from bs4 import BeautifulSoup
 
 from .elements_base import InputElement
-from .elements import _Action, Element, Page, UserEmail, Value, parse as parse_element, Short
+from .elements import _Action, Element, Page, UserEmail, Value, parse as parse_element
 from .elements import CallbackRetVal, default_callback
-from .errors import ClosedForm, InfiniteLoop, ParseError, FormNotLoaded, FormNotFilled
+from .errors import ClosedForm, InfiniteLoop, ParseError, FormNotLoaded, FormNotFilled, InvalidURL
 from .util import add_indent, page_separator, list_get
 
 # based on https://gist.github.com/gcampfield/cb56f05e71c60977ed9917de677f919c
@@ -129,6 +130,10 @@ class Settings:
         self.show_points = True
 
 
+class SubmissionResult:
+    pass  # !!
+
+
 class Form:
     """A Google Form wrapper.
 
@@ -156,27 +161,33 @@ class Form:
         STYLE = 4  # Not implemented
         TITLE = 8
 
-    def __init__(self, url):
-        self.url = url
-        self._fbzx = None
-        self._history = None
-        self._draft = None
+    def __init__(self):
+        self.url = None
         self.name = None
         self.title = None
         self.description = None
         self.pages = None
         self.settings = Settings()
         self.is_loaded = False
-        self.is_filled = False
+        self.is_filled = False  # !! use a property
 
-    def load(self, http: Optional[requests.Session] = None):
+        self._prefilled_data = {}
+        self._fbzx = None
+        self._history = None
+        self._draft = None
+
+    def load(self, url, http: Optional[requests.Session] = None):
         """Loads and parses the form.
 
         Args:
+            url: The form url. The url should look like
+                "https://docs.google.com/forms/.../viewform".
+                Pre-filled links are also supported.
             http: A session which is used to load the form.
                 By default, requests.get is used.
 
         Raises:
+            gforms.errors.InvalidURL: The url is invalid.
             requests.exceptions.RequestException: A request failed.
             gforms.errors.ParseError: The form could not be parsed.
             gforms.errors.ClosedForm: The form is closed.
@@ -184,10 +195,13 @@ class Form:
         if http is None:
             http = requests
 
-        # TODO!! prefilled links
         # load() may fail, in this case form data will be inconsistent
         self.is_loaded = False
         self.is_filled = False
+
+        url, prefilled_data = self._parse_url(url)
+        self.url = url
+        self._prefilled_data = prefilled_data
 
         page = http.get(self.url)
         soup = BeautifulSoup(page.text, 'html.parser')
@@ -371,6 +385,21 @@ class Form:
             page = next_page
         return res
 
+    @staticmethod
+    def _parse_url(url):
+        """Extracts the base url and prefilled data."""
+        url_data = urlsplit(url)
+        if not url_data.path.endswith('viewform'):
+            raise InvalidURL(url)
+        prefilled_data = {}
+        query = parse_qs(url_data.query)
+        if query.get('usp', [''])[0] == 'pp_url':
+            prefilled_data = {
+                int(key[6:]): value
+                for key, value in query.items() if key.startswith('entry.')
+            }
+        return urlunsplit(url_data[:3]+('', '')), prefilled_data
+
     def _parse(self, data):
         self.name = data[self._DocIndex.NAME]
         form = data[self._DocIndex.FORM]
@@ -393,7 +422,10 @@ class Form:
             if el_type == Element.Type.PAGE:
                 self.pages.append(Page.parse(elem).with_index(len(self.pages)))
                 continue
-            self.pages[-1].append(parse_element(elem))
+            element = parse_element(elem)
+            self.pages[-1].append(element)
+            if isinstance(element, InputElement):
+                element.prefill(self._prefilled_data)
         self._resolve_actions()
 
     def _resolve_actions(self):

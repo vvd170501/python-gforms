@@ -805,7 +805,7 @@ class TestTransitions:
                 page.append(TestTransitions._dropdown(id_=page.id + 100 * i,  # just unique ids
                                                       entry_id=page.id + 100 * i + 10,
                                                       options=options))
-        form = Form('')
+        form = Form()
         form.pages = pages
         form._resolve_actions()
         form.is_loaded = True

@@ -156,13 +156,14 @@ with open(url_module, 'rb') as f:
 
 def load_dump(form_type):
     from . import form_dumps
-    form = Form('https://docs.google.com/forms/d/e/0123456789abcdef/viewform')
+    form = Form()
+    form.url = 'https://docs.google.com/forms/d/e/0123456789abcdef/viewform'
     form._fbzx = '123456789'
     form._draft = f'[null,null,"{form._fbzx}"]\n'
     form._history = '0'
     data = getattr(form_dumps, form_type)
     form._parse(data)
-    form._is_loaded = True
+    form.is_loaded = True
     return form
 
 
@@ -194,8 +195,8 @@ def load_form(session):
 
     @skip_requests_exceptions
     def load_form(url):
-        form = Form(url)
-        form.load(session)
+        form = Form()
+        form.load(url, http=session)
         return form
 
     return load_form

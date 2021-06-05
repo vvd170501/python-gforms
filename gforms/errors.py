@@ -19,6 +19,16 @@ class FormsError(Exception, ABC):
         return message
 
 
+class InvalidURL(FormsError):
+    def __init__(self, url, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.url = url
+
+    def _message(self):
+        return f'Invalid URL: "{self.url}".' \
+               ' A valid URL should look like https://docs.google.com/forms/.../viewform)'
+
+
 class FormError(FormsError):
     def __init__(self, form, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -183,7 +193,7 @@ class InvalidArguments(ValidatorWarning):
 
     def __str__(self):
         return f'Cannot convert arguments for {self.cls.__name__}.' \
-              f' Type: {self.val_type} ({self.subtype}), Arguments: {repr(self.args)}.' \
+               f' Type: {self.val_type} ({self.subtype}), Arguments: {repr(self.args)}.' \
                ' Validator is disabled'
 
 
