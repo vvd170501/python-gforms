@@ -15,7 +15,8 @@ from .elements_base import ChoiceValue, EmptyValue, MultiChoiceValue, TextValue,
 from .errors import ElementTypeError, InvalidDuration, \
     RequiredElement, InvalidText, MisconfiguredElement, UnknownValidator, InvalidArguments
 from .options import ActionOption
-from .util import RADIO_SYMBOLS, CHECKBOX_SYMBOLS, add_indent, elem_separator, random_subset
+from .util import RADIO_SYMBOLS, CHECKBOX_SYMBOLS, add_indent, elem_separator, random_subset, \
+    list_get
 from .validators import CheckboxValidator, CheckboxTypes
 
 
@@ -78,10 +79,8 @@ class Page(Element):
     @classmethod
     def _parse(cls, elem):
         res = super()._parse(elem)
-        res['prev_action'] = _Action.NEXT
-        if len(elem) > cls._Index.ACTION:
-            # FIRST / NEXT / SUBMIT / page id
-            res['prev_action'] = elem[cls._Index.ACTION]
+        # FIRST / NEXT / SUBMIT / page id
+        res['prev_action'] = list_get(elem, cls._Index.ACTION, _Action.NEXT)
         return res
 
     def __init__(self, *, prev_action, **kwargs):
@@ -272,7 +271,7 @@ class Dropdown(ActionChoiceInput):
 class Checkboxes(ValidatedInput, OtherChoiceInput, MultiChoiceInput):
     _choice_symbols = CHECKBOX_SYMBOLS
 
-    class _Index(ChoiceInput._Index):
+    class _Index(ChoiceInput1D._Index):
         VALIDATOR = 4
 
     @classmethod
@@ -316,7 +315,7 @@ class Scale(ChoiceInput1D):
         high: The label for the highest value (may be empty).
     """
 
-    class _Index(ChoiceInput._Index):
+    class _Index(ChoiceInput1D._Index):
         LABELS = 3
 
     @classmethod

@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, List, cast
 from warnings import warn
 
 from .errors import SameColumn, UnknownValidator, InvalidText, InvalidArguments, InvalidChoiceCount
-from .util import EMAIL_REGEX, URL_REGEX, DefaultEnum, ArgEnum
+from .util import EMAIL_REGEX, URL_REGEX, DefaultEnum, ArgEnum, list_get
 
 if TYPE_CHECKING:
     from elements import Checkboxes
@@ -64,13 +64,11 @@ class Validator(ABC):
         argnum = subtype.argnum
         msg_index = cls._Index.ARGS_OR_MSG
         args = None
-        msg = None
-        if argnum > 0 and len(val) > cls._Index.ARGS_OR_MSG:
-            args = val[cls._Index.ARGS_OR_MSG]
+        if argnum > 0:
+            args = list_get(val, cls._Index.ARGS_OR_MSG, None)
             msg_index += 1
         # If args are needed but not found, msg_index will not be increased. msg is not used -> ok
-        if len(val) > msg_index:
-            msg = val[msg_index]
+        msg = list_get(val, msg_index, None)
         args, valid_args = cls._parse_args(args, type_, subtype, argnum)
         if not valid_args:
             warn(InvalidArguments(cls, type_, subtype, args))

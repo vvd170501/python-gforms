@@ -38,6 +38,12 @@ class ArgEnum(Enum):
         return obj
 
 
+def list_get(lst, index, default=None):
+    if len(lst) > index:
+        return lst[index]
+    return default
+
+
 def page_separator(indent):
     return '=' * SEP_WIDTH
 

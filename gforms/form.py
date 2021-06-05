@@ -10,7 +10,7 @@ from .elements_base import InputElement
 from .elements import _Action, Element, Page, UserEmail, Value, parse as parse_element, Short
 from .elements import CallbackRetVal, default_callback
 from .errors import ClosedForm, InfiniteLoop, ParseError, FormNotLoaded, FormNotFilled
-from .util import add_indent, page_separator
+from .util import add_indent, page_separator, list_get
 
 # based on https://gist.github.com/gcampfield/cb56f05e71c60977ed9917de677f919c
 
@@ -55,7 +55,7 @@ class Settings:
         # First block
         CONFIRMATION_MSG = 0
         SHOW_RESUBMIT_LINK = 1
-        SHOW_SUMMARY = 2  # TODO add properties for links? (this and resubmit)
+        SHOW_SUMMARY = 2
         EDIT_RESPONSES = 3  # !!!
         # Second block. The first 4 elements may be None
         SHOW_PROGRESSBAR = 0
@@ -83,8 +83,7 @@ class Settings:
         # any block may be missing
         first_block = form_data[self._Index.FIRST_BLOCK]
         second_block = form_data[self._Index.SECOND_BLOCK]
-        quiz = form_data[self._Index.QUIZ_BLOCK]\
-            if len(form_data) > self._Index.QUIZ_BLOCK else None
+        quiz = list_get(form_data, self._Index.QUIZ_BLOCK, None)
 
         if first_block is not None:
             self.confirmation_msg = first_block[self._Index.CONFIRMATION_MSG] or None
