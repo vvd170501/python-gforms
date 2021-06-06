@@ -1,8 +1,8 @@
 import json
 import re
 from enum import Enum
-from typing import Callable, Optional
-from urllib.parse import urlsplit, urlunsplit, parse_qs
+from typing import Callable, Optional, Set, Dict, List
+from urllib.parse import urlsplit, urlunsplit, parse_qs, urlencode
 
 import requests
 from bs4 import BeautifulSoup
@@ -10,7 +10,8 @@ from bs4 import BeautifulSoup
 from .elements_base import InputElement
 from .elements import _Action, Element, Page, UserEmail, Value, parse as parse_element
 from .elements import CallbackRetVal, default_callback
-from .errors import ClosedForm, InfiniteLoop, ParseError, FormNotLoaded, FormNotValidated, InvalidURL
+from .errors import ClosedForm, InfiniteLoop, ParseError, FormNotLoaded, FormNotValidated, \
+    InvalidURL, EditingDisabled
 from .util import add_indent, page_separator, list_get
 
 
@@ -171,14 +172,6 @@ class Form:
             Indicates if this form was successfully validated and may be submitted.
     """
 
-    @property
-    def is_validated(self):
-        """Indicates if all input elements were validated.
-
-        If self.fill was called and did not raise an exception,
-        this value will be True."""
-        return len(self._unvalidated_elements) == 0 and self._no_loops
-
     class _DocIndex:
         FORM = 1
         NAME = 3
@@ -191,23 +184,32 @@ class Form:
         STYLE = 4  # Not implemented
         TITLE = 8
 
+    url: Optional[str]
+    name: Optional[str]
+    title: Optional[str]
+    description: Optional[str]
+    pages: Optional[List[Page]]
+    settings: Settings
+
+    is_loaded: bool
+    _unvalidated_elements: Set[Element]
+    _no_loops: bool  # If true, the form is guaranteed to contain no loops.
+
+    _prefilled_data: Dict[str, List[str]]
+    _fbzx: Optional[str]  # Doesn't need to be unique
+    _history: Optional[str]
+    _draft: Optional[str]
+
+    @property
+    def is_validated(self):
+        """Indicates if all input elements were validated.
+
+        If self.fill was called and did not raise an exception,
+        this value will be True."""
+        return len(self._unvalidated_elements) == 0 and self._no_loops
+
     def __init__(self):
-        self.url = None
-        self.name = None
-        self.title = None
-        self.description = None
-        self.pages = None
-        self.settings = Settings()
-        self.is_loaded = False
-
-        self._prefilled_data = {}
-
-        self._unvalidated_elements = set()
-        self._no_loops = True  # The form is guaranteed to contain no loops.
-
-        self._fbzx = None  # Doesn't need to be unique
-        self._history = None
-        self._draft: Optional[str] = None
+        self._clear()
 
     def load(self, url, session: Optional[requests.Session] = None):
         """Loads and parses the form.
@@ -224,14 +226,12 @@ class Form:
             requests.exceptions.RequestException: A request failed.
             gforms.errors.ParseError: The form could not be parsed.
             gforms.errors.ClosedForm: The form is closed.
+            gforms.errors.EditingDisabled: Response editing is disabled.
         """
         if session is None:
             session = requests
 
-        # load() may fail, in this case form data will be inconsistent
-        self.is_loaded = False
-        self._unvalidated_elements = set()
-        self._no_loops = True
+        self._clear()
 
         self.url = url
         prefilled_data, is_edit = self._parse_url(url)
@@ -242,6 +242,8 @@ class Form:
         if self._is_closed(page):
             self.title = soup.find('title').text
             raise ClosedForm(self)
+        if is_edit and self._editing_disabled(page):
+            raise EditingDisabled(self)
 
         data = self._raw_form(soup)
         self._fbzx = self._get_fbzx(soup)
@@ -360,6 +362,7 @@ class Form:
             RuntimeError: The predicted next page differs from the real one
                 or a session(s) response with an incorrect code was received.
             gforms.errors.ClosedForm: The form is closed.
+            gforms.errors.EditingDisabled: Response editing is disabled.
             gforms.errors.FormNotLoaded: The form was not loaded.
             gforms.errors.FormNotValidated: The form was not validated.
         """
@@ -406,6 +409,24 @@ class Form:
             page = next_page
         return SubmissionResult(last_result)
 
+    def _clear(self):
+        self.url = None
+        self.name = None
+        self.title = None
+        self.description = None
+        self.pages = None
+        self.settings = Settings()
+        self.is_loaded = False
+
+        self._prefilled_data = {}
+
+        self._unvalidated_elements = set()
+        self._no_loops = True  # The form is guaranteed to contain no loops.
+
+        self._fbzx = None  # Doesn't need to be unique
+        self._history = None
+        self._draft = None
+
     @staticmethod
     def _parse_url(url: str):
         """Checks the URL and extracts prefilled data."""
@@ -421,6 +442,19 @@ class Form:
             }
         is_edit = 'edit2' in query
         return prefilled_data, is_edit
+
+    @staticmethod
+    def _response_url(url: str):
+        url_data = list(urlsplit(url))
+        url_data[2] = re.sub(r'viewform.*?$', 'formResponse', url_data[2])  # path
+        original_query = parse_qs(url_data[3])
+        query = {}
+        # If 'edit2' is removed, it is possible to edit a response when editing is restricted.
+        # This may be eventually fixed by Google.
+        if 'edit2' in original_query:
+            query['edit2'] = original_query['edit2']
+        url_data[3] = urlencode(query, doseq=True)
+        return urlunsplit(url_data)
 
     def _parse(self, data):
         self.name = data[self._DocIndex.NAME]
@@ -545,10 +579,12 @@ class Form:
         payload['pageHistory'] = history
         payload['draftResponse'] = draft
 
-        url = re.sub(r'(.+)viewform.*', r'\1formResponse', self.url)
+        url = self._response_url(self.url)
         page = http.post(url, data=payload)
         if self._is_closed(page):
             raise ClosedForm(self)
+        if self._editing_disabled(page):
+            raise EditingDisabled(self)
         return page
 
     @staticmethod
@@ -567,6 +603,10 @@ class Form:
     @staticmethod
     def _is_closed(page):
         return page.url.endswith('closedform')
+
+    @staticmethod
+    def _editing_disabled(page):
+        return page.url.endswith('editingdisabled')
 
     @staticmethod
     def _get_input(soup, name):
