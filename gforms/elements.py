@@ -150,7 +150,7 @@ class Page(Element):
                 result += elem.draft()
         return result
 
-    def _resolve_actions(self, next_page: Page, mapping):
+    def _resolve_actions(self, next_page: Optional[Page], mapping):
         for elem in self.elements:
             if isinstance(elem, ActionChoiceInput):
                 elem._resolve_actions(next_page, mapping)

@@ -85,11 +85,6 @@ class Validator(ABC):
 
     def validate(self, elem):
         """Validates the element's value."""
-        # REL_TODO alternative variant:
-        #   validate(self, values) -> Optional[Tuple[Type[Exception], Any]]
-        #   Return exception class and args, create and raise the exception in element's validate()
-        #   In this case, validator is less dependent on element implementation details.
-        #   Also, validator testing should be easier.
         if self.has_unknown_type() or self.bad_args:
             return
         self._validate(elem, elem._values)
