@@ -227,6 +227,7 @@ class InputElement(Element, ABC):
         values = [prefilled_data.get(entry_id, []) for entry_id in self._entry_ids]
         # prefilled data still needs to be validated
         # (e.g. a modified url was used or elements were updated)
+        # Also, there may be no prefilled values for a required element.
         self._set_values(values)
 
     @staticmethod
@@ -888,6 +889,11 @@ class ActionChoiceInput(ChoiceInput1D):
                 The argument's type is not accepted by this element.
         """
         return self._set_choices([self._to_choice_list(value)])
+
+    def _set_values(self, values: List[Union[List[str], EmptyValue]]):
+        super()._set_values(values)
+        if self._form is not None:
+            self._form._no_loops = False
 
     def _set_choices(self, choices: List[Union[List[ChoiceValue], EmptyValue]]):
         self.next_page = None
