@@ -468,9 +468,8 @@ class Duration(TimeInput):
         else:
             raise ElementTypeError(self, value)
 
-    def validate(self):
-        """See base class."""
-        super().validate()
+    def _validate(self):
+        super()._validate()
         if self._timedelta is None:
             return
         seconds = self._timedelta.total_seconds()
@@ -530,6 +529,7 @@ class DateTime(DateInput):
             date_, time_ = value.date(), value.time()
         else:
             raise ElementTypeError(self, value)
+        # self._date is None if and only if self._time is None, no need to extend validation
         self._date = date_
         self._time = time_
 
@@ -552,12 +552,6 @@ class DateTime(DateInput):
         date_str = result[0][2][0]  # add DraftIndex class?
         result[0][2][0] = date_str + f' {self._time.strftime("%H:%M")}'
         return result
-
-    def validate(self):
-        """See base class."""
-        super().validate()
-        if self.required and self._time is None:
-            raise RequiredElement(self)
 
     def _answer(self) -> List[str]:
         if self._date is None:

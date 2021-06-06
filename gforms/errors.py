@@ -50,9 +50,10 @@ class FormNotLoaded(FormError):
         return f'Form with URL "{self.form.url}" was not loaded'
 
 
-class FormNotFilled(FormError):
+class FormNotValidated(FormError):
     def _message(self):
-        return f'Form "{self.form.title}" was not filled'
+        return f'Form "{self.form.title}" was not validated'\
+               ' or some elements were filled with invalid values.'
 
 
 class ElementError(FormsError):

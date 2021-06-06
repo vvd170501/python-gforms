@@ -5,7 +5,7 @@ import pytest
 from gforms import Form
 from gforms.elements_base import Grid
 from gforms.elements import DateTime, Duration, Date, Time
-from gforms.errors import FormNotLoaded, FormNotFilled
+from gforms.errors import FormNotLoaded, FormNotValidated
 
 from .conftest import BaseFormTest
 
@@ -43,12 +43,15 @@ class TestFill(BaseFormTest):
         form.fill()
 
     def test_fill_with_optional(self, form):
-        # if an exception is raised, this means that callback was invoked on an optional element
+        # Check that the default callback was invoked on at least one optional element
+        # Optional elements in this form cannot be filled by the default callback
         with pytest.raises(NotImplementedError):
             form.fill(fill_optional=True)
 
     def test_fill_callback(self, form):
         form.fill(self.custom_callback)
+
+    # TODO test Value.UNCHANGED and form.is_validated
 
     def test_callback_missing_return(self, form):
         with pytest.raises(ValueError, match=r'missing.+return statement'):
@@ -60,15 +63,23 @@ class TestFill(BaseFormTest):
         _ = form.to_str(include_answer=True)
 
 
-class TestUninitialized:
+class TestFillNotLoaded:
     def test_fill_not_loaded(self):
         form = Form()
         with pytest.raises(FormNotLoaded):
             form.fill()
 
-    def test_submit_not_filled(self):
+
+class TestSubmitErrors(BaseFormTest):
+    form_type = 'fill'
+
+    def test_submit_not_loaded(self):
         form = Form()
-        with pytest.raises(FormNotFilled):
+        with pytest.raises(FormNotLoaded):
+            form.submit()
+
+    def test_submit_not_validated(self, form):
+        with pytest.raises(FormNotValidated):
             form.submit()
 
 
