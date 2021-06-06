@@ -506,7 +506,8 @@ class Form:
     def _emulate_history(self):
         last_page = self.pages[0]
         history = self._history.split(',')  # ['0']
-        draft = json.loads(self._draft)  # [None, None, fbzx]
+        draft = json.loads(self._draft)  # basic draft, without prefill/edit: [None, None, fbzx]
+        draft[0] = None  # may contain prefilled values
         # draft[0] should be None or non-empty,
         # but submission works with an empty value (on 25.05.21)
 
