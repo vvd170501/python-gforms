@@ -207,7 +207,7 @@ class Form:
 
         self._fbzx = None  # Doesn't need to be unique
         self._history = None
-        self._draft = None
+        self._draft: Optional[str] = None
 
     def load(self, url, session: Optional[requests.Session] = None):
         """Loads and parses the form.
@@ -234,7 +234,7 @@ class Form:
         self._no_loops = True
 
         self.url = url
-        prefilled_data = self._parse_url(url)
+        prefilled_data, is_edit = self._parse_url(url)
         self._prefilled_data = prefilled_data
 
         page = session.get(self.url)
@@ -249,6 +249,10 @@ class Form:
         self._draft = self._get_draft(soup)
         if data is None or any(value is None for value in [self._fbzx, self._history, self._draft]):
             raise ParseError(self)
+
+        if is_edit:
+            self._prefilled_data = self._prefill_from_draft(self._draft)
+
         self._parse(data)
         self.is_loaded = True
 
@@ -405,7 +409,6 @@ class Form:
     @staticmethod
     def _parse_url(url: str):
         """Checks the URL and extracts prefilled data."""
-        # !! edit
         url_data = urlsplit(url)
         if not url_data.path.endswith('viewform'):
             raise InvalidURL(url)
@@ -416,7 +419,8 @@ class Form:
                 int(key[6:]): value
                 for key, value in query.items() if key.startswith('entry.')
             }
-        return prefilled_data
+        is_edit = 'edit2' in query
+        return prefilled_data, is_edit
 
     def _parse(self, data):
         self.name = data[self._DocIndex.NAME]
@@ -546,6 +550,19 @@ class Form:
         if self._is_closed(page):
             raise ClosedForm(self)
         return page
+
+    @staticmethod
+    def _prefill_from_draft(draft: str):
+        draft = json.loads(draft)
+        if draft[0] is None:
+            return {}
+        prefilled_data = {}
+        for entry in draft[0]:
+            prefilled_data[entry[1]] = entry[2]  # Use an index class for draft?
+        email = list_get(draft, 6, None)
+        if email is not None:
+            prefilled_data[UserEmail.ENTRY_ID] = [email]
+        return prefilled_data
 
     @staticmethod
     def _is_closed(page):
