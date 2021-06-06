@@ -196,7 +196,7 @@ def load_form(session):
     @skip_requests_exceptions
     def load_form(url):
         form = Form()
-        form.load(url, http=session)
+        form.load(url, session=session)
         return form
 
     return load_form
