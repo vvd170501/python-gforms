@@ -2,6 +2,7 @@
 
 import argparse
 import random
+import string
 from math import ceil
 from time import sleep, asctime, time as time_now
 from datetime import date, datetime, time, timedelta
@@ -12,6 +13,7 @@ from fake_useragent import FakeUserAgent
 from gforms import Form
 from gforms.errors import InfiniteLoop, ClosedForm, ValidationError
 from gforms.elements_base import Grid
+from gforms.elements import UserEmail
 from gforms.elements import Dropdown, Scale, Radio, Checkboxes, Value
 from gforms.elements import Date, DateTime, Time, Duration
 
@@ -43,13 +45,21 @@ def highexp(n=10, m=None):
     return n + 1 - lowexp(n, m)
 
 
+def random_email():
+    domain = random.choice(['example.com', 'example.org', 'example.net'])
+    username = ''.join(random.choices(string.ascii_lowercase, k=random.randint(6, 8)))
+    return f'{username}@{domain}'
+
+
 class Filler:
     def __init__(self):
         self.mapping = {}
 
     def callback(self, elem, i, j):
+        if isinstance(elem, UserEmail):
+            return random_email()
         if isinstance(elem, Scale):
-            return lowexp(len(elem.options))
+            return lowexp(len(elem.options))  # custom choice function
         if isinstance(elem, Radio):
             return Value.DEFAULT  # random choice
         if isinstance(elem, Dropdown):
@@ -104,8 +114,8 @@ def main():
     )
     args = parser.parse_args()
 
-    form = Form(args.url)
-    form.load(sess)
+    form = Form()
+    form.load(args.url, session=sess)
     filler = Filler()
 
     # Show the form
@@ -143,10 +153,10 @@ def main():
             continue
 
         try:
-            form.submit(sess)
+            form.submit(session=sess)
             # You may want to use history emulation:
             #   submission is faster, but it is still experimental
-            # form.submit(sess, emulate_history=True)
+            # form.submit(session=sess, emulate_history=True)
             print(sep + 'OK', end='')
         except ClosedForm:
             print(sep + 'Form is closed')
