@@ -217,7 +217,7 @@ class Form:
         Args:
             url: The form url. The url should look like
                 "https://docs.google.com/forms/.../viewform".
-                Pre-filled links are also supported.
+                Pre-filled links and response editing are also supported.
             session: A session which is used to load the form.
                 If session is None, requests.get is used.
 

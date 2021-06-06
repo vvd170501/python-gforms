@@ -33,9 +33,10 @@ def callback(element, page_index, element_index):
         return input(element.name)
 
 url = 'https://docs.google.com/forms/d/e/.../viewform'
-form = Form(url)
 
-form.load()
+form = Form()
+
+form.load(url)
 print(form.to_str(indent=2))  # a text representation, may be useful for CLI applications
 
 form.fill(callback)
