@@ -155,7 +155,7 @@ class Form:
 
         If self.fill was called and did not raise an exception,
         this value will be True."""
-        return len(self._unvalidated_elements) == 0
+        return len(self._unvalidated_elements) == 0 and self._no_loops
 
     class _DocIndex:
         FORM = 1
@@ -181,6 +181,7 @@ class Form:
         self._prefilled_data = {}
 
         self._unvalidated_elements = set()
+        self._no_loops = True  # The form is guaranteed to contain no loops.
 
         self._fbzx = None
         self._history = None
@@ -208,6 +209,7 @@ class Form:
         # load() may fail, in this case form data will be inconsistent
         self.is_loaded = False
         self._unvalidated_elements = set()
+        self._no_loops = True
 
         url, prefilled_data = self._parse_url(url)
         self.url = url
@@ -295,50 +297,18 @@ class Form:
                 because the page transitions form an infinite loop.
             NotImplementedError: The default callback was used for an unsupported element.
         """
-        if not self.is_loaded:
-            raise FormNotLoaded(self)
-
-        page = self.pages[0]
-        pages_to_submit = {page}
-        while page is not None:
-            # use real element index or it would be better to count only input elements?
-            for elem_index, elem in enumerate(page.elements):
-                if not isinstance(elem, InputElement):
-                    continue
-                value: CallbackRetVal = Value.DEFAULT
-                if callback is not None:
-                    value = callback(elem, page.index, elem_index)
-                    if value is None:  # missing return statement in the callback
-                        raise ValueError('Callback returned an invalid value (None).'
-                                         ' Is it missing a return statement?')
-
-                if value is Value.DEFAULT:
-                    if elem.required or fill_optional:
-                        value = default_callback(elem, page.index, elem_index)
-                    else:
-                        value = value.EMPTY
-
-                if value is not Value.UNCHANGED:
-                    elem.set_value(value)
-                # Still need to validate (see InputElement.prefill).
-                if elem in self._unvalidated_elements:
-                    elem.validate()
-
-            page = page.next_page()
-            if page in pages_to_submit:
-                # It is possible to create a form in which any choice will lead to an infinite loop.
-                # These cases are not detected (add a separate public method?)
-                raise InfiniteLoop(self)
-            pages_to_submit.add(page)
+        self._iterate_elements(callback, fill_optional, do_fill=True)
 
     def validate(self):
-        """Validate all updated elements.
+        """Checks if the form can be submitted successfully.
 
         Raises:
+            gforms.errors.FormNotLoaded: The form was not loaded.
             gforms.errors.ValidationError: An element has an invalid value.
+            gforms.errors.InfiniteLoop:
+                The page transitions form an infinite loop.
         """
-        for elem in list(self._unvalidated_elements):
-            elem.validate()
+        self._iterate_elements(do_fill=False)
 
     def submit(self, session=None, need_receipt=False, emulate_history=False) -> List[requests.models.Response]:
         """Submits the form.
@@ -441,13 +411,19 @@ class Form:
         if self.settings.collect_emails:
             # Not a real element, but is displayed like one
             self._email_input = UserEmail()
+            self._email_input.bind(self)
             self.pages[0].append(self._email_input)
+            self._email_input.prefill(self._prefilled_data)
+
         if form[self._FormIndex.ELEMENTS] is None:
             return
+
         for elem in form[self._FormIndex.ELEMENTS]:
             el_type = Element.Type(elem[Element._Index.TYPE])
             if el_type == Element.Type.PAGE:
                 self.pages.append(Page.parse(elem).with_index(len(self.pages)))
+                # A multipage form with no input elements still needs to be validated
+                self._no_loops = False
                 continue
             element = parse_element(elem)
             element.bind(self)
@@ -455,6 +431,50 @@ class Form:
             if isinstance(element, InputElement):
                 element.prefill(self._prefilled_data)
         self._resolve_actions()
+
+    def _iterate_elements(
+            self,
+            callback: Optional[CallbackType] = None,
+            fill_optional=False,
+            *,
+            do_fill
+    ):
+        """(optionally) fills and validates the elements."""
+        if not self.is_loaded:
+            raise FormNotLoaded(self)
+
+        page = self.pages[0]
+        pages_to_submit = {page}
+        while page is not None:
+            # use real element index or it would be better to count only input elements?
+            for elem_index, elem in enumerate(page.elements):
+                if not isinstance(elem, InputElement):
+                    continue
+                if do_fill:
+                    value: CallbackRetVal = Value.DEFAULT
+                    if callback is not None:
+                        value = callback(elem, page.index, elem_index)
+                        if value is None:  # missing return statement in the callback
+                            raise ValueError('Callback returned an invalid value (None).'
+                                             ' Is it missing a return statement?')
+                    if value is Value.DEFAULT:
+                        if elem.required or fill_optional:
+                            value = default_callback(elem, page.index, elem_index)
+                        else:
+                            value = value.EMPTY
+                    if value is not Value.UNCHANGED:
+                        elem.set_value(value)
+
+                if elem in self._unvalidated_elements:
+                    elem.validate()
+
+            page = page.next_page()
+            if page in pages_to_submit:
+                # It is possible to create a form in which any choice will lead to an infinite loop.
+                # These cases are not detected (add a separate public method?)
+                raise InfiniteLoop(self)
+            pages_to_submit.add(page)
+        self._no_loops = True
 
     def _resolve_actions(self):
         mapping = {page.id: page for page in self.pages}
