@@ -45,6 +45,12 @@ class ClosedForm(ParseError):
         return f'Form "{self.form.title}" is closed'
 
 
+class EditingDisabled(ParseError):
+    def _message(self):
+        fmt = f'"{self.form.title}"' if self.form.title is not None else 'with URL ' + self.form.url
+        return 'Cannot edit a response for form ' + fmt
+
+
 class FormNotLoaded(FormError):
     def _message(self):
         return f'Form with URL "{self.form.url}" was not loaded'
