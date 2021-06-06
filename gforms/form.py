@@ -1,7 +1,7 @@
 import json
 import re
 from enum import Enum
-from typing import Callable, Optional, List
+from typing import Callable, Optional
 from urllib.parse import urlsplit, urlunsplit, parse_qs
 
 import requests
@@ -13,7 +13,8 @@ from .elements import CallbackRetVal, default_callback
 from .errors import ClosedForm, InfiniteLoop, ParseError, FormNotLoaded, FormNotValidated, InvalidURL
 from .util import add_indent, page_separator, list_get
 
-# based on https://gist.github.com/gcampfield/cb56f05e71c60977ed9917de677f919c
+
+# Originally based on https://gist.github.com/gcampfield/cb56f05e71c60977ed9917de677f919c
 
 
 CallbackType = Callable[[InputElement, int, int], CallbackRetVal]
@@ -57,7 +58,7 @@ class Settings:
         CONFIRMATION_MSG = 0
         SHOW_RESUBMIT_LINK = 1
         SHOW_SUMMARY = 2
-        EDIT_RESPONSES = 3  # !!!
+        EDIT_RESPONSES = 3
         # Second block. The first 4 elements may be None
         SHOW_PROGRESSBAR = 0
         SIGNIN_REQUIRED = 1
@@ -131,7 +132,28 @@ class Settings:
 
 
 class SubmissionResult:
-    pass  # !!
+    """A result of successful form submission.
+
+    Attributes:
+        resubmit: A link to submit another response.
+        summary: A link to view summary charts.
+        edit: A link to edit the response.
+    """
+
+    def __init__(self, soup):
+        self.resubmit = None
+        self.summary = None
+        self.edit = None
+        # Is the div class fixed?
+        container = soup.find('div', class_='freebirdFormviewerViewResponseLinksContainer')
+        for link in container.find_all('a'):
+            href = link.get('href', '')
+            if 'viewanalytics' in href:
+                self.summary = href
+            elif 'edit2' in href:
+                self.edit = href
+            else:
+                self.resubmit = href
 
 
 class Form:
@@ -183,7 +205,7 @@ class Form:
         self._unvalidated_elements = set()
         self._no_loops = True  # The form is guaranteed to contain no loops.
 
-        self._fbzx = None
+        self._fbzx = None  # Doesn't need to be unique
         self._history = None
         self._draft = None
 
@@ -211,8 +233,8 @@ class Form:
         self._unvalidated_elements = set()
         self._no_loops = True
 
-        url, prefilled_data = self._parse_url(url)
         self.url = url
+        prefilled_data = self._parse_url(url)
         self._prefilled_data = prefilled_data
 
         page = session.get(self.url)
@@ -264,7 +286,7 @@ class Form:
             callback: Optional[CallbackType] = None,
             fill_optional=False
     ):
-        """Fills the form using values returned by the callback.
+        """Fills and validates the form using values returned by the callback.
 
         If callback is None, the default callback (see below) is used.
 
@@ -310,7 +332,7 @@ class Form:
         """
         self._iterate_elements(do_fill=False)
 
-    def submit(self, session=None, need_receipt=False, emulate_history=False) -> List[requests.models.Response]:
+    def submit(self, session=None, need_receipt=False, emulate_history=False) -> SubmissionResult:
         """Submits the form.
 
         The form must be loaded, (optionally) filled and validated.
@@ -356,35 +378,34 @@ class Form:
         if session is None:
             session = requests
 
+        last_result = None
         if emulate_history:
-            last_page, history, draft = self._emulate_history()
-            return [self._submit_page(session, last_page, history, draft, False)]
-
-        res = []
-        page = self.pages[0]
-        history = self._history
-        draft = self._draft
+            page, history, draft = self._emulate_history()
+        else:
+            page = self.pages[0]
+            history = self._history
+            draft = self._draft
 
         while page is not None:
             next_page = page.next_page()
-            sub_result = self._submit_page(session, page, history, draft, next_page is not None)
-            res.append(sub_result)
-            if sub_result.status_code != 200:
-                raise RuntimeError('Invalid response code', res)
-            soup = BeautifulSoup(sub_result.text, 'html.parser')
-            history = self._get_history(soup)
-            draft = self._get_draft(soup)
+            response = self._submit_page(session, page, history, draft, next_page is not None)
+            if response.status_code != 200:
+                raise RuntimeError('Invalid response code', response)
+            last_result = BeautifulSoup(response.text, 'html.parser')
+            history = self._get_history(last_result)
+            draft = self._get_draft(last_result)
             if next_page is None and history is None:
                 break  # submitted successfully
             if next_page is None or history is None or \
                     next_page.index != int(history.rsplit(',', 1)[-1]):
-                raise RuntimeError('Incorrect next page', self, res, next_page)
+                raise RuntimeError('Incorrect next page', self, response, next_page)
             page = next_page
-        return res
+        return SubmissionResult(last_result)
 
     @staticmethod
     def _parse_url(url: str):
-        """Extracts the base url and prefilled data."""
+        """Checks the URL and extracts prefilled data."""
+        # !! edit
         url_data = urlsplit(url)
         if not url_data.path.endswith('viewform'):
             raise InvalidURL(url)
@@ -395,7 +416,7 @@ class Form:
                 int(key[6:]): value
                 for key, value in query.items() if key.startswith('entry.')
             }
-        return urlunsplit(url_data[:3]+('', '')), prefilled_data
+        return prefilled_data
 
     def _parse(self, data):
         self.name = data[self._DocIndex.NAME]
