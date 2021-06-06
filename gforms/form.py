@@ -186,15 +186,15 @@ class Form:
         self._history = None
         self._draft = None
 
-    def load(self, url, http: Optional[requests.Session] = None):
+    def load(self, url, session: Optional[requests.Session] = None):
         """Loads and parses the form.
 
         Args:
             url: The form url. The url should look like
                 "https://docs.google.com/forms/.../viewform".
                 Pre-filled links are also supported.
-            http: A session which is used to load the form.
-                By default, requests.get is used.
+            session: A session which is used to load the form.
+                If session is None, requests.get is used.
 
         Raises:
             gforms.errors.InvalidURL: The url is invalid.
@@ -202,8 +202,8 @@ class Form:
             gforms.errors.ParseError: The form could not be parsed.
             gforms.errors.ClosedForm: The form is closed.
         """
-        if http is None:
-            http = requests
+        if session is None:
+            session = requests
 
         # load() may fail, in this case form data will be inconsistent
         self.is_loaded = False
@@ -213,7 +213,7 @@ class Form:
         self.url = url
         self._prefilled_data = prefilled_data
 
-        page = http.get(self.url)
+        page = session.get(self.url)
         soup = BeautifulSoup(page.text, 'html.parser')
         if self._is_closed(page):
             self.title = soup.find('title').text
@@ -340,13 +340,13 @@ class Form:
         for elem in list(self._unvalidated_elements):
             elem.validate()
 
-    def submit(self, http=None, need_receipt=False, emulate_history=False) -> List[requests.models.Response]:
+    def submit(self, session=None, need_receipt=False, emulate_history=False) -> List[requests.models.Response]:
         """Submits the form.
 
         The form must be loaded, (optionally) filled and validated.
 
         Args:
-            http: see Form.load
+            session: see Form.load
             need_receipt:
                 Effective only if settings.send_receipt is SendReceipt.OPT_IN
                 If True, will throw NotImplementedError.
@@ -362,7 +362,7 @@ class Form:
         Raises:
             requests.exceptions.RequestException: A request failed.
             RuntimeError: The predicted next page differs from the real one
-                or a http(s) response with an incorrect code was received.
+                or a session(s) response with an incorrect code was received.
             gforms.errors.ClosedForm: The form is closed.
             gforms.errors.FormNotLoaded: The form was not loaded.
             gforms.errors.FormNotValidated: The form was not validated.
@@ -383,12 +383,12 @@ class Form:
             # TODO is it possible to use a callback?
             raise NotImplementedError('Need to solve a captcha to submit the form')
 
-        if http is None:
-            http = requests
+        if session is None:
+            session = requests
 
         if emulate_history:
             last_page, history, draft = self._emulate_history()
-            return [self._submit_page(http, last_page, history, draft, False)]
+            return [self._submit_page(session, last_page, history, draft, False)]
 
         res = []
         page = self.pages[0]
@@ -397,7 +397,7 @@ class Form:
 
         while page is not None:
             next_page = page.next_page()
-            sub_result = self._submit_page(http, page, history, draft, next_page is not None)
+            sub_result = self._submit_page(session, page, history, draft, next_page is not None)
             res.append(sub_result)
             if sub_result.status_code != 200:
                 raise RuntimeError('Invalid response code', res)
