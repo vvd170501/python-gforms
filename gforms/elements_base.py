@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 from enum import Enum, auto
-from typing import Dict, List, Literal, Union, cast, Any, Optional, Tuple
+from typing import Dict, List, Literal, Union, cast, Any, Optional, Tuple, TYPE_CHECKING
 
 from .util import list_get
 from .validators import Validator, GridValidator, TextValidator, GridTypes, NumberTypes
@@ -12,16 +12,21 @@ from .errors import DuplicateOther, EmptyOther, InvalidChoice, \
     InvalidRowChoice, MisconfiguredElement
 from .options import ActionOption, Option, parse as parse_option
 
+if TYPE_CHECKING:
+    from .form import Form
+
 
 class Value(Enum):
     """A value which can be returned by a callback in Form.fill
 
     DEFAULT: Use the value returned by the default callback.
     EMPTY: Leave the element empty.
+    UNCHANGED: Leave the element value unchanged.
     """
 
     DEFAULT = auto()
     EMPTY = auto()
+    UNCHANGED = auto()
 
 
 EmptyValue = Literal[Value.EMPTY]
@@ -101,6 +106,10 @@ class Element:
         self.name = name
         self.description = description
         self.type = type_
+        self._form: Optional['Form'] = None
+
+    def bind(self, form):
+        self._form = form
 
     def to_str(self, indent=0, **kwargs):
         """Returns a text representation of the element.
@@ -170,8 +179,9 @@ class InputElement(Element, ABC):
                 The value has a correct type,
                 but is not valid for this element.
         """
-        for i in range(len(self._values)):
-            self._validate_entry(i)
+        self._validate()
+        if self._form is not None:
+            self._form._unvalidated_elements.discard(self)
 
     def to_str(self, indent=0, include_answer=False):
         """See base class."""
@@ -214,9 +224,10 @@ class InputElement(Element, ABC):
 
     def prefill(self, prefilled_data: Dict[str, List[str]]):
         """Fills the element with values from the prefilled link."""
-        for i, entry_id in enumerate(self._entry_ids):
-            if entry_id in prefilled_data:
-                self._values[i] = prefilled_data[entry_id]
+        values = [prefilled_data.get(entry_id, []) for entry_id in self._entry_ids]
+        # prefilled data still needs to be validated
+        # (e.g. a modified url was used or elements were updated)
+        self._set_values(values)
 
     @staticmethod
     def _submit_id(entry_id):
@@ -233,6 +244,8 @@ class InputElement(Element, ABC):
                 values[i] = []
 
         self._values = values  # type: ignore
+        if self._form is not None:
+            self._form._unvalidated_elements.add(self)
 
     def _header(self) -> List[str]:
         parts = [self._type_str()]
@@ -259,6 +272,10 @@ class InputElement(Element, ABC):
         if not entry_val:
             return 'EMPTY'
         return ', '.join(f'"{value}"' for value in entry_val)
+
+    def _validate(self):
+        for i in range(len(self._values)):
+            self._validate_entry(i)
 
     def _validate_entry(self, index):
         if self.required and not self._values[index]:
@@ -550,12 +567,10 @@ class ValidatedInput(InputElement, ABC):
             return False
         return self._is_misconfigured()
 
-    def validate(self):
-        """Checks if the element has a valid value.
+    def _validate(self):
+        """See base validate method.
 
-        May raise any of the exceptions specified in the base method.
-
-        If MisconfiguredElement is raised and this element is required,
+        If this element is required and MisconfiguredElement is raised,
         you should skip the page with this element, if possible.
         Otherwise, the form is not submittable.
 
@@ -563,7 +578,7 @@ class ValidatedInput(InputElement, ABC):
             gforms.errors.MisconfiguredElement:
                 This element will not accept any non-empty value.
         """
-        super().validate()
+        super()._validate()
         if not any(self._values):  # element is empty
             return
         if self.validator is not None:
@@ -707,11 +722,6 @@ class TimeInput(SingleInput):
         self._minute = None
         self._second = None
 
-    def validate(self):
-        """See base class."""
-        if self.required and self._is_empty():
-            raise RequiredElement(self)
-
     def payload(self) -> Dict[str, List[str]]:
         """See base class."""
         payload = {}
@@ -732,6 +742,10 @@ class TimeInput(SingleInput):
         # will return an empty string for an empty element.
         # The server sets the same draft value, so it's ok
         return [(None, self._entry_id, [':'.join(hms)], 0)]
+
+    def _validate(self):
+        if self.required and self._is_empty():
+            raise RequiredElement(self)
 
     def _set_time(self, hour, minute, second):
         self._hour = hour
@@ -773,11 +787,6 @@ class DateInput(SingleInput):
         self.has_year = has_year
         self._date = None
 
-    def validate(self):
-        """See base class."""
-        if self.required and self._date is None:
-            raise RequiredElement(self)
-
     def payload(self) -> Dict[str, List[str]]:
         """See base class."""
         if self._date is None:
@@ -796,6 +805,10 @@ class DateInput(SingleInput):
             return []
         fmt = '%Y-%m-%d' if self.has_year else '%m-%d'
         return [(None, self._entry_id, [self._date.strftime(fmt)], 0)]
+
+    def _validate(self):
+        if self.required and self._date is None:
+            raise RequiredElement(self)
 
     def _answer(self) -> List[str]:
         if self._date is None:

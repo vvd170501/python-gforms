@@ -10,7 +10,7 @@ from bs4 import BeautifulSoup
 from .elements_base import InputElement
 from .elements import _Action, Element, Page, UserEmail, Value, parse as parse_element
 from .elements import CallbackRetVal, default_callback
-from .errors import ClosedForm, InfiniteLoop, ParseError, FormNotLoaded, FormNotFilled, InvalidURL
+from .errors import ClosedForm, InfiniteLoop, ParseError, FormNotLoaded, FormNotValidated, InvalidURL
 from .util import add_indent, page_separator, list_get
 
 # based on https://gist.github.com/gcampfield/cb56f05e71c60977ed9917de677f919c
@@ -145,9 +145,17 @@ class Form:
         pages: List of form pages.
         settings: The form settings.
         is_loaded: Indicates if this form was properly loaded and parsed.
-        is_filled:
-            Indicates if this form was successfully filled and may be submitted.
+        is_validated:
+            Indicates if this form was successfully validated and may be submitted.
     """
+
+    @property
+    def is_validated(self):
+        """Indicates if all input elements were validated.
+
+        If self.fill was called and did not raise an exception,
+        this value will be True."""
+        return len(self._unvalidated_elements) == 0
 
     class _DocIndex:
         FORM = 1
@@ -169,9 +177,11 @@ class Form:
         self.pages = None
         self.settings = Settings()
         self.is_loaded = False
-        self.is_filled = False  # !! use a property
 
         self._prefilled_data = {}
+
+        self._unvalidated_elements = set()
+
         self._fbzx = None
         self._history = None
         self._draft = None
@@ -197,7 +207,7 @@ class Form:
 
         # load() may fail, in this case form data will be inconsistent
         self.is_loaded = False
-        self.is_filled = False
+        self._unvalidated_elements = set()
 
         url, prefilled_data = self._parse_url(url)
         self.url = url
@@ -232,9 +242,6 @@ class Form:
         if not self.is_loaded:
             raise FormNotLoaded(self)
 
-        if not self.is_filled:
-            include_answer = False
-
         if self.description:
             title = f'{self.title}\n{self.description}'
         else:
@@ -264,6 +271,9 @@ class Form:
 
         For types and values accepted by an element, see its set_value method.
 
+        You may also fill individual elements using their set_value method.
+        In this ase, you will need to call Form.validate manually.
+
         Args:
             callback: The callback which returns values for elements.
                 If the callback returns gforms.elements.Value.DEFAULT
@@ -280,13 +290,13 @@ class Form:
                 The callback returned an unexpected value for an element
             gforms.errors.ValidationError: The form cannot be submitted later
                 if an element is filled with the callback return value
+            gforms.errors.FormNotLoaded: The form was not loaded.
             gforms.errors.InfiniteLoop: The chosen values cannot be submitted,
                 because the page transitions form an infinite loop.
             NotImplementedError: The default callback was used for an unsupported element.
         """
         if not self.is_loaded:
             raise FormNotLoaded(self)
-        self.is_filled = False
 
         page = self.pages[0]
         pages_to_submit = {page}
@@ -308,8 +318,11 @@ class Form:
                     else:
                         value = value.EMPTY
 
-                elem.set_value(value)
-                elem.validate()
+                if value is not Value.UNCHANGED:
+                    elem.set_value(value)
+                # Still need to validate (see InputElement.prefill).
+                if elem in self._unvalidated_elements:
+                    elem.validate()
 
             page = page.next_page()
             if page in pages_to_submit:
@@ -317,10 +330,20 @@ class Form:
                 # These cases are not detected (add a separate public method?)
                 raise InfiniteLoop(self)
             pages_to_submit.add(page)
-        self.is_filled = True
+
+    def validate(self):
+        """Validate all updated elements.
+
+        Raises:
+            gforms.errors.ValidationError: An element has an invalid value.
+        """
+        for elem in list(self._unvalidated_elements):
+            elem.validate()
 
     def submit(self, http=None, need_receipt=False, emulate_history=False) -> List[requests.models.Response]:
         """Submits the form.
+
+        The form must be loaded, (optionally) filled and validated.
 
         Args:
             http: see Form.load
@@ -341,9 +364,13 @@ class Form:
             RuntimeError: The predicted next page differs from the real one
                 or a http(s) response with an incorrect code was received.
             gforms.errors.ClosedForm: The form is closed.
+            gforms.errors.FormNotLoaded: The form was not loaded.
+            gforms.errors.FormNotValidated: The form was not validated.
         """
-        if not self.is_filled:
-            raise FormNotFilled(self)
+        if not self.is_loaded:
+            raise FormNotLoaded(self)
+        if not self.is_validated:
+            raise FormNotValidated(self)
 
         if self.settings.signin_required:
             # TODO auth?
@@ -386,7 +413,7 @@ class Form:
         return res
 
     @staticmethod
-    def _parse_url(url):
+    def _parse_url(url: str):
         """Extracts the base url and prefilled data."""
         url_data = urlsplit(url)
         if not url_data.path.endswith('viewform'):
@@ -423,6 +450,7 @@ class Form:
                 self.pages.append(Page.parse(elem).with_index(len(self.pages)))
                 continue
             element = parse_element(elem)
+            element.bind(self)
             self.pages[-1].append(element)
             if isinstance(element, InputElement):
                 element.prefill(self._prefilled_data)
