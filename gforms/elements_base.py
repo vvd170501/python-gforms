@@ -128,7 +128,11 @@ class Element:
 
 
 class InputElement(Element, ABC):
-    """An element which can be filled."""
+    """An element which can be filled.
+
+    Attributes:
+        required: Self-explanatory.
+    """
 
     class _Index(Element._Index):
         ENTRIES = 4
@@ -141,7 +145,7 @@ class InputElement(Element, ABC):
         entries = cls._get_entries(elem)
         res.update({
             'entry_ids': [e[cls._Index.ENTRY_ID] for e in entries],
-            'required': entries[0][cls._Index.REQUIRED],  # same for all entries
+            'required': bool(entries[0][cls._Index.REQUIRED]),  # same for all entries
         })
         return res
 
@@ -237,6 +241,9 @@ class InputElement(Element, ABC):
     @staticmethod
     def _get_entries(elem):
         return elem[InputElement._Index.ENTRIES]
+
+    def _is_empty(self):
+        return not any(self._values)
 
     def _set_values(self, values: List[Union[List[str], EmptyValue]]):
         values = values[:]
@@ -493,6 +500,9 @@ class OtherChoiceInput(ChoiceInput1D):
         result[0] = (*data, answers, 1)
         return result
 
+    def _is_empty(self):
+        return super()._is_empty() and self._other_value is None
+
     def _set_choices(self, choices: List[Union[List[ChoiceValue], EmptyValue]]):
         self._other_value = None
         super()._set_choices(choices)
@@ -561,10 +571,12 @@ class ValidatedInput(InputElement, ABC):
         self.validator: Optional[Validator] = validator
 
     def is_misconfigured(self):
-        """Checks if the element can never be filled with a valid non-empty value."""
+        """Checks if the element cannot be filled with a valid value."""
         if self.validator is None:
             return False
         if self.validator.has_unknown_type() or self.validator.bad_args:
+            return False
+        if not self.required:  # always can set empty value
             return False
         return self._is_misconfigured()
 
@@ -579,12 +591,10 @@ class ValidatedInput(InputElement, ABC):
             gforms.errors.MisconfiguredElement:
                 This element will not accept any non-empty value.
         """
+        if self.is_misconfigured():
+            raise MisconfiguredElement(self)
         super()._validate()
-        if not any(self._values):  # element is empty
-            return
-        if self.validator is not None:
-            if self._is_misconfigured():
-                raise MisconfiguredElement(self)
+        if self.validator is not None and not self._is_empty():  # Non-empty value
             self.validator.validate(self)
 
     def _hints(self, indent=0, modify=False):
@@ -600,7 +610,7 @@ class ValidatedInput(InputElement, ABC):
 
     @abstractmethod
     def _is_misconfigured(self):
-        # called only when self.validator is not None
+        # NOTE method is called only when self.validator is not None and self.required is True
         raise NotImplementedError()
 
 
@@ -818,6 +828,9 @@ class DateInput(SingleInput):
         if self.has_year:
             fmt = '%Y/' + fmt
         return [f'"{self._date.strftime(fmt)}"']
+
+    def _is_empty(self):
+        return self._date is None
 
 
 class MediaElement(Element):

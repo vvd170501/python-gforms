@@ -304,9 +304,9 @@ class Checkboxes(ValidatedInput, OtherChoiceInput, MultiChoiceInput):
         cnt = len(self.options)
         if self.other_option is not None:
             cnt += 1
-        required = self.validator.args[0]  # always > 0
+        required_cnt = self.validator.args[0]  # always > 0
         if (self.validator.subtype is CheckboxTypes.AT_LEAST
-                or self.validator.subtype is CheckboxTypes.EXACTLY) and cnt < required:
+                or self.validator.subtype is CheckboxTypes.EXACTLY) and cnt < required_cnt:
             return True
         return False
 
@@ -562,53 +562,53 @@ class DateTime(DateInput):
 
 
 def _grid_validated_choices(elem: Grid):
-    # REL_TODO this function will choose maximal allowed number of columns,
-    #   even if required is False (find a better solution or disable this feature entirely?)
-
     n = len(elem.rows)
     if isinstance(elem, RadioGrid):
-        if len(elem.options) >= n:
+        if elem.required:
+            # cols >= rows (checked in default_callback by elem.is_misconfigured)
+            # Just pick a unique option for each row.
             return random.sample(elem.options, k=n)
-        # cols < rows
-        # elem is not required (checked in default_callback by elem.is_misconfigured)
-        row_indices = random.sample(range(n), k=len(elem.options))
+        # Pick some options and put each into a unique random row.
+        # With prob=0.5 the grid is too empty.
+        opts = random_subset(elem.options, max_size=n, prob=0.8)
+        row_indices = random.sample(range(n), k=len(opts))
         choices = [Value.EMPTY for _ in range(n)]
-        for opt, idx in zip(elem.options, row_indices):
+        for opt, idx in zip(opts, row_indices):
             choices[idx] = opt
         return choices
 
     # CheckboxGrid
-    if not elem.required:
-        # each column is chosen in a single (random) row
-        row_indices = random.choices(range(n), k=len(elem.options))
-        choices = [[] for _ in range(n)]
-        for opt, idx in zip(elem.options, row_indices):
-            choices[idx].append(opt)
-        return choices
+    result = [[] for _ in range(n)]
+    opts = random_subset(elem.options,
+                         min_size=n if elem.required else 0,
+                         prob=0.8)
+    if elem.required:
+        result = [[opt] for opt in opts[:n]]  # choose at least one option in each row
+        opts = opts[n:]
 
-    # Required CheckboxGrid
-    choices = random.sample(elem.options, k=n)
-    res = [[choice] for choice in choices]  # choose at least one option in each row
-    remaining = set(elem.options) - set(choices)
-    if not remaining:
-        return res
-    # assign all remaining columns to random rows
-    row_indices = random.choices(range(n), k=len(remaining))
-    for opt, idx in zip(remaining, row_indices):
-        res[idx].append(opt)
-    return res
+    # Add each of the remaining options to a random row
+    row_indices = random.choices(range(n), k=len(opts))
+    for opt, idx in zip(opts, row_indices):
+        result[idx].append(opt)
+    return result
 
 
 def _cb_validated_choices(elem: Checkboxes):
-    required = elem.validator.args[0]
+    required_cnt = elem.validator.args[0]
     if elem.validator.subtype is CheckboxTypes.AT_MOST:
-        return random_subset(elem.options, max_size=required)
-    if len(elem.options) < required:
+        return random_subset(elem.options, min_size=int(elem.required), max_size=required_cnt)
+    if len(elem.options) + int(elem.other_option is not None) < required_cnt:
+        # Impossible to select the required number of options.
+        # Element is optional, this is the only valid value
+        return Value.EMPTY
+    if len(elem.options) < required_cnt:
+        if not elem.required:
+            return Value.EMPTY
         raise NotImplementedError('Need to choose "Other" value to meet validation requirements')
     if elem.validator.subtype is CheckboxTypes.AT_LEAST:
-        return random_subset(elem.options, min_size=required)
+        return random_subset(elem.options, min_size=required_cnt)
     if elem.validator.subtype is CheckboxTypes.EXACTLY:
-        return random.sample(elem.options, required)
+        return random.sample(elem.options, required_cnt)
 
 
 def _validated_choices(elem):
@@ -646,9 +646,7 @@ def default_callback(elem: InputElement, page_index, elem_index) -> Union[ElemVa
             and elem.validator is not None:
 
         if elem.is_misconfigured():
-            if elem.required:
-                raise MisconfiguredElement(elem)
-            return Value.EMPTY
+            raise MisconfiguredElement(elem)
         if elem.validator.has_unknown_type():
             # Raise, not warn. Otherwise, most probably, form submission will fail
             # If needed, custom callback should handle such cases
