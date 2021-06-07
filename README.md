@@ -42,6 +42,7 @@ print(form.to_str(indent=2))  # a text representation, may be useful for CLI app
 form.fill(callback)
 form.submit()
 
-# Faster but less stable submission for multi-page forms
+# Faster submission for multi-page forms (use less requests)
+# (in theory, you may get banned, but now the number of requests isn't checked)
 form.submit(emulate_history=True)
 ```
