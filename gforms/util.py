@@ -59,21 +59,23 @@ def add_indent(text, indent):
     return ''.join(spaces + line for line in text.splitlines(keepends=True))
 
 
-def random_subset(a, min_size: Optional[int] = None, max_size: Optional[int] = None):
+def random_subset(a, *, prob=0.5, min_size: Optional[int] = None, max_size: Optional[int] = None):
     """Choose a random subset of a.
 
     Args:
         a: the input sequence
+        prob: Probability to pick an element
+            (when called without size constraints).
         min_size: Minimal size of the result.
         max_size: Maximal size of the result.
     Returns:
         A random subset of a
     """
-    def subset(a):
+    def subset(a, prob):
         res = []
         remaining = []
         for el in a:
-            if random.random() < 0.5:
+            if random.random() < prob:
                 res.append(el)
             else:
                 remaining.append(el)
@@ -90,4 +92,4 @@ def random_subset(a, min_size: Optional[int] = None, max_size: Optional[int] = N
         raise ValueError(f'Invalid size range for random_subset: [{min_size}, {max_size}]')
 
     tmp = random.sample(a, max_size)
-    return tmp[:min_size] + subset(tmp[min_size:])  # tweak distribution?
+    return tmp[:min_size] + subset(tmp[min_size:], prob)  # tweak distribution?

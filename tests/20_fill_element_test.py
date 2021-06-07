@@ -158,10 +158,10 @@ class ValidatedTest(ElementTest):
         List[str], Tuple[ElemValue, ElemValue, Type[Exception]]
     ]]
 
-    # validator_data = any_non_empty_value
+    # validator_data = (invalid_value, expected_exc_type)
     misconfigured: List[Tuple[
         Tuple[Validator.Type, Subtype, Optional[list], Optional[str]],
-        List[str], ElemValue
+        List[str], Tuple[ElemValue, Type[Exception]]
     ]]
 
     @property
@@ -206,15 +206,17 @@ class ValidatedTest(ElementTest):
 
     def test_misconfigured(self, validator_data, optional, required):
         # with each validator in self.misconfigured:
-        #  - assert MisconfiguredElement is raised on value
-        #  - check empty value
-        value = validator_data
-        optional.set_value(value)
-        required.set_value(value)
-        with pytest.raises(MisconfiguredElement):
-            optional.validate()
+        #  - assert MisconfiguredElement is raised for a required element
+        #  - try validating an empty optional element
+
+        required.set_value(Value.EMPTY)
         with pytest.raises(MisconfiguredElement):
             required.validate()
+
+        value, exc = validator_data
+        optional.set_value(value)
+        with pytest.raises(exc, match=optional.validator.error_msg):
+            optional.validate()
         optional.set_value(Value.EMPTY)
         optional.validate()
 
@@ -293,7 +295,7 @@ class TestShort(TextTest):
     ]
 
     misconfigured = [
-        ((TextValidator.Type.NUMBER, NumberTypes.RANGE, (100, 0), None), [], '50'),
+        ((TextValidator.Type.NUMBER, NumberTypes.RANGE, (100, 0), None), [], ('50', InvalidText)),
     ]
 
     def test_multiline(self, element):
@@ -476,13 +478,13 @@ class TestCheckboxes(ValidatedTest, MayHaveOther):
 
     misconfigured = [
         ((CheckboxValidator.Type.DEFAULT, CheckboxTypes.EXACTLY, opt_count + 1, None),
-            ['no_other'], ['Opt1']),
+            ['no_other'], ('Opt1', InvalidChoiceCount)),
         ((CheckboxValidator.Type.DEFAULT, CheckboxTypes.AT_LEAST, opt_count + 1, None),
-            ['no_other'], ['Opt1']),
+            ['no_other'], ('Opt1', InvalidChoiceCount)),
 
         # With "Other"
         ((CheckboxValidator.Type.DEFAULT, CheckboxTypes.EXACTLY, opt_count + 2, None),
-            [], ['Opt1']),
+            [], ('Other', InvalidChoiceCount)),
     ]
 
     @pytest.fixture
@@ -627,7 +629,7 @@ class TestRadioGrid(GridTest):
 
     misconfigured = [
         ((GridValidator.Type.DEFAULT, GridTypes.EXCLUSIVE_COLUMNS, None, None),
-            [], ['Col1'] * GridTest.row_count),
+            [], (['Col1'] * GridTest.row_count, SameColumn)),
     ]
 
     @pytest.fixture
