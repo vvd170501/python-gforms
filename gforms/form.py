@@ -5,6 +5,7 @@ from typing import Callable, Optional, Set, Dict, List
 from urllib.parse import urlsplit, urlunsplit, parse_qs, urlencode
 
 import requests
+import requests.cookies
 from bs4 import BeautifulSoup
 
 from .elements_base import InputElement
@@ -30,7 +31,6 @@ class Settings:
             If this value is SendReceipt.ALWAYS or the user opts in
             to receive the receipt, a captcha will be required
             to submit the form.
-            NOTE Captcha handling is not implemented.
         signin_required: When Ture, the user must use a google account
             to submit this form. Only one response can be submitted.
         show_summary: Whether the user is allowed to view response stats.
@@ -76,7 +76,6 @@ class Settings:
         IS_QUIZ = 2
 
     class SendReceipt(Enum):
-        # NOTE Captcha is required to send a receipt
         UNUSED = None  # value is None when collect_emails is False
         OPT_IN = 1
         NEVER = 2
@@ -196,6 +195,7 @@ class Form:
     _no_loops: bool  # If true, the form is guaranteed to contain no loops.
 
     _prefilled_data: Dict[str, List[str]]
+    _first_page: Optional[requests.models.Response]
     _fbzx: Optional[str]  # Doesn't need to be unique
     _history: Optional[str]
     _draft: Optional[str]
@@ -237,12 +237,13 @@ class Form:
         prefilled_data, is_edit = self._parse_url(url)
         self._prefilled_data = prefilled_data
 
-        page = session.get(self.url)
-        soup = BeautifulSoup(page.text, 'html.parser')
-        if self._is_closed(page):
+        self._first_page = session.get(self.url)
+
+        soup = BeautifulSoup(self._first_page.text, 'html.parser')
+        if self._is_closed(self._first_page):
             self.title = soup.find('title').text
             raise ClosedForm(self)
-        if is_edit and self._editing_disabled(page):
+        if is_edit and self._editing_disabled(self._first_page):
             raise EditingDisabled(self)
 
         data = self._raw_form(soup)
@@ -338,7 +339,14 @@ class Form:
         """
         self._iterate_elements(do_fill=False)
 
-    def submit(self, session=None, need_receipt=False, emulate_history=False) -> SubmissionResult:
+    def submit(
+            self,
+            session=None, *,
+            need_receipt=False,
+            captcha_handler: Optional[Callable[[requests.models.Response], str]] = None,
+            signin_handler: Optional[Callable[[], requests.cookies.RequestsCookieJar]]=None,
+            emulate_history=False
+    ) -> SubmissionResult:
         """Submits the form.
 
         The form must be loaded, (optionally) filled and validated.
@@ -348,19 +356,26 @@ class Form:
             need_receipt:
                 Effective only if settings.send_receipt is SendReceipt.OPT_IN
                 If True, will throw NotImplementedError.
-            emulate_history: (Experimental)
-                Use only one request for submitting the form.
+            captcha_handler:
+                A function which accepts a Response (a page with reCAPTCHA v2)
+                and returns a string (g-recaptcha-response).
+                NOTE Response and Response.request contain user's input.
+                It should not be passed to third-party services unprocessed,
+                since this may lead to privacy or security issues.
+            signin_handler:
+                A function which returns cookies for a signed-in Google account.
+            emulate_history:
+                Use only one request to submit the form
+                (two requests for multipage forms with a captcha).
                 For single-page forms the behavior is unchanged.
                 For multi-page forms, the data from previous pages
-                (pageHistory and draftResponse) is created locally.
-                When using this option,
-                some values may be submitted incorrectly, since
-                the format of draftResponse is only partially known.
+                (pageHistory and draftResponse) is formed locally.
 
         Raises:
             requests.exceptions.RequestException: A request failed.
             RuntimeError: The predicted next page differs from the real one
                 or a session(s) response with an incorrect code was received.
+            ValueError: one of the handlers is required, but was not provided.
             gforms.errors.ClosedForm: The form is closed.
             gforms.errors.EditingDisabled: Response editing is disabled.
             gforms.errors.FormNotLoaded: The form was not loaded.
@@ -371,43 +386,43 @@ class Form:
         if not self.is_validated:
             raise FormNotValidated(self)
 
-        if self.settings.signin_required:
-            # TODO auth?
-            raise NotImplementedError('A Google account is required to submit this form')
-
         if self.settings.send_receipt is not Settings.SendReceipt.OPT_IN:
             need_receipt = self.settings.send_receipt is Settings.SendReceipt.ALWAYS
-
-        if need_receipt:
-            # TODO is it possible to use a callback?
-            raise NotImplementedError('Need to solve a captcha to submit the form')
-
+        if need_receipt and captcha_handler is None:
+            raise ValueError('captcha_handler is missing')
         if session is None:
             session = requests
+        if self.settings.signin_required:  # TODO auth
+            raise NotImplementedError('A Google account is required to submit this form')
 
-        last_result = None
         if emulate_history:
-            page, history, draft = self._emulate_history()
+            last_response, page, history, draft = self._emulate_history(session, need_receipt)
         else:
             page = self.pages[0]
             history = self._history
             draft = self._draft
+            last_response = self._first_page  # TODO prefill with sample values (at load time?)
+
+        captcha_response = None
 
         while page is not None:
             next_page = page.next_page()
-            response = self._submit_page(session, page, history, draft, next_page is not None)
-            if response.status_code != 200:
-                raise RuntimeError('Invalid response code', response)
-            last_result = BeautifulSoup(response.text, 'html.parser')
-            history = self._get_history(last_result)
-            draft = self._get_draft(last_result)
+            # solve the CAPTCHA to submit the form and send a receipt
+            if need_receipt and next_page is None:
+                captcha_response = captcha_handler(last_response)
+            last_response = self._submit_page(session, page, history, draft,
+                                              continue_=next_page is not None,
+                                              need_receipt=need_receipt,
+                                              captcha_response=captcha_response)
+            soup = BeautifulSoup(last_response.text, 'html.parser')
+            history = self._get_history(soup)
+            draft = self._get_draft(soup)
             if next_page is None and history is None:
-                break  # submitted successfully
+                return SubmissionResult(soup)
             if next_page is None or history is None or \
                     next_page.index != int(history.rsplit(',', 1)[-1]):
-                raise RuntimeError('Incorrect next page', self, response, next_page)
+                raise RuntimeError('Incorrect next page', self, last_response, next_page)
             page = next_page
-        return SubmissionResult(last_result)
 
     def _clear(self):
         self.url = None
@@ -419,6 +434,7 @@ class Form:
         self.is_loaded = False
 
         self._prefilled_data = {}
+        self._first_page = None
 
         self._unvalidated_elements = set()
         self._no_loops = True  # The form is guaranteed to contain no loops.
@@ -541,8 +557,7 @@ class Form:
         for (page, next_page) in zip(self.pages, self.pages[1:] + [None]):
             page._resolve_actions(next_page, mapping)
 
-    def _emulate_history(self):
-        last_page = self.pages[0]
+    def _emulate_history(self, session, update_last_response):
         history = self._history.split(',')  # ['0']
         draft = json.loads(self._draft)  # basic draft, without prefill/edit: [None, None, fbzx]
         draft[0] = None  # may contain prefilled values
@@ -559,18 +574,32 @@ class Form:
             draft[6] = self._email_input._value[0]
             draft[7] = 1  # ??
 
+        last_page = self.pages[0]
+        prev_page = None
+        last_response = self._first_page
+
         while True:
             next_page = last_page.next_page()
             if next_page is None:
-                return last_page, ','.join(history), json.dumps(draft)
+                if update_last_response and last_page is not self.pages[0]:
+                    # TODO fill the form with sample values to get the last_response?
+                    #   (see captcha_handler note in Form.submit)
+                    last_response = self._submit_page(session,
+                                                      prev_page,
+                                                      ','.join(history[:-1]),
+                                                      json.dumps(draft),
+                                                      continue_=True, need_receipt=False)
+                return last_response, last_page, ','.join(history), json.dumps(draft)
             history.append(str(next_page.index))
             if draft[0] is None:
                 draft[0] = last_page.draft()
             else:
                 draft[0] += last_page.draft()
+            prev_page = last_page
             last_page = next_page
 
-    def _submit_page(self, http, page, history, draft, continue_):
+    def _submit_page(self, session, page, history, draft, *,
+                     continue_, need_receipt, captcha_response=None):
         payload = page.payload()
 
         payload['fbzx'] = self._fbzx
@@ -578,14 +607,18 @@ class Form:
             payload['continue'] = 1
         payload['pageHistory'] = history
         payload['draftResponse'] = draft
+        if need_receipt and not continue_:
+            payload['g-recaptcha-response'] = captcha_response
 
         url = self._response_url(self.url)
-        page = http.post(url, data=payload)
-        if self._is_closed(page):
+        response = session.post(url, data=payload)
+        if self._is_closed(response):
             raise ClosedForm(self)
-        if self._editing_disabled(page):
+        if self._editing_disabled(response):
             raise EditingDisabled(self)
-        return page
+        if response.status_code != 200:
+            raise RuntimeError('Invalid response code', response)
+        return response
 
     @staticmethod
     def _prefill_from_draft(draft: str):
