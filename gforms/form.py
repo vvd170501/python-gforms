@@ -102,7 +102,7 @@ class Settings:
             self.is_quiz = bool(quiz[self._Index.IS_QUIZ])
         if self.is_quiz:
             self.immediate_grades = bool(quiz[self._Index.IMMEDIATE_GRADES])
-            grades_settings = quiz[self._Index.IMMEDIATE_GRADES]
+            grades_settings = quiz[self._Index.GRADES_SETTINGS]
             self.show_missed = bool(grades_settings[self._Index.SHOW_MISSED])
             self.show_correct_answers = bool(grades_settings[self._Index.SHOW_CORRECT])
             self.show_points = bool(grades_settings[self._Index.SHOW_POINTS])
@@ -498,7 +498,9 @@ class Form:
             el_type = Element.Type(elem[Element._Index.TYPE])
             if el_type == Element.Type.PAGE:
                 self.pages.append(Page.parse(elem).with_index(len(self.pages)))
-                # A multipage form with no input elements still needs to be validated
+                # A multipage form with no input elements still needs to be validated.
+                # A single-page form with action elements doesn't need additional validation
+                # (actions are ignored).
                 self._no_loops = False
                 continue
             element = parse_element(elem)

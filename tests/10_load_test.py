@@ -3,15 +3,15 @@ from typing import List, Type
 
 import pytest
 
+from gforms import Form
 from gforms.elements_base import Element
-from gforms.elements import Page
+from gforms.elements import Page, UserEmail
 from gforms.elements import Comment, Image, Video
 from gforms.elements import Short, Paragraph
 from gforms.elements import Checkboxes, Dropdown, Radio, Scale
 from gforms.elements import CheckboxGrid, RadioGrid
 from gforms.elements import Date, DateTime, Time, Duration
-
-from gforms.errors import ClosedForm, ParseError
+from gforms.errors import ClosedForm, ParseError, InvalidURL
 from gforms.options import ActionOption
 from gforms.validators import GridValidator, TextValidator, GridTypes, CheckboxTypes
 
@@ -20,8 +20,12 @@ from .conftest import BaseFormTest
 
 class TestFormLoad:
     def test_invalid_url(self, load_form):
+        with pytest.raises(InvalidURL):
+            load_form('https://docs.google.com/forms/d/e/not_a_form')
+
+    def test_parse_error(self, load_form):
         with pytest.raises(ParseError):
-            load_form('https://docs.google.com/forms/d/e/00000000000000000000000000000000000000000000000000000000/viewform')
+            load_form('https://docs.google.com/forms/d/e/invalid_form_id/viewform')
 
     def test_closed(self, load_form):
         with pytest.raises(ClosedForm):
@@ -101,9 +105,9 @@ class TestNonInput(ElementTest):
     form_type = 'non_input'
     expected = [[Comment, Image, Video]]
 
-    def test_video(self, first_page, url):
+    def test_video(self, first_page, urls):
         video = first_page[2]
-        assert video.url() == url.yt_url
+        assert video.url() == urls.yt_url
 
 
 class TestTextInput(ElementTest):
@@ -365,7 +369,6 @@ class TestCheckboxValidators(ElementTest):
     form_type = 'checkbox_validation'
     expected = [[Checkboxes] * 3]
 
-    @pytest.mark.required
     def test_validator_types(self, first_page):
         expected_types = [CheckboxTypes.AT_LEAST, CheckboxTypes.AT_MOST, CheckboxTypes.EXACTLY]
         for elem, expected in zip(first_page, expected_types):
@@ -376,4 +379,46 @@ class TestCheckboxValidators(ElementTest):
             assert validator.error_msg == 'Err_msg'
 
 
-# TODO add tests for form settings, prefilled links, response editing, row/option shuffling
+class TestShuffleOptions(ElementTest):
+    form_type = 'shuffle_options'
+    expected = [[Radio, Checkboxes, Dropdown], [RadioGrid, CheckboxGrid]]
+
+    def test_shuffle(self, pages):
+        for elem in pages[0]:
+            assert elem.shuffle_options
+        for elem in pages[1]:
+            assert elem.shuffle_rows
+
+
+class TestEmail(ElementTest):
+    form_type = 'settings_email'
+    expected = [[UserEmail]]
+
+
+class TestPrefilled(BaseFormTest):
+    """
+    The form contains one short text input.
+    The link fills this input with "text_value".
+    """
+
+    form_type = 'prefilled'
+
+    def test_value(self, form):
+        value = 'text_value'
+        short = form.pages[0].elements[0]
+        assert short._value == [value]
+
+
+class TestEdit(BaseFormTest):
+    """
+    The form is the same as in prefill test.
+    The input was filled with "text_value" and the response was submitted.
+    The link is used to edit the response.
+    """
+
+    form_type = 'edit'
+
+    def test_value(self, form):
+        value = 'text_value'
+        short = form.pages[0].elements[0]
+        assert short._value == [value]

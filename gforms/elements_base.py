@@ -903,14 +903,14 @@ class ActionChoiceInput(ChoiceInput1D):
         """
         return self._set_choices([self._to_choice_list(value)])
 
-    def _set_values(self, values: List[Union[List[str], EmptyValue]]):
-        super()._set_values(values)
-        if self._form is not None:
-            self._form._no_loops = False
-
     def _set_choices(self, choices: List[Union[List[ChoiceValue], EmptyValue]]):
         self.next_page = None
         super()._set_choices(choices)
+        # Don't reset no_loops if the element's options have no actions or the actions are ignored
+        if (self._form is not None and
+                isinstance(self.options[0], ActionOption) and
+                cast(ActionOption, self.options[0]).next_page is not None):
+            self._form._no_loops = False
 
     def _add_choice(self, choices, choice: Option):
         super()._add_choice(choices, choice)

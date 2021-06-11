@@ -22,6 +22,7 @@ class TestFill(BaseFormTest):
     There is also a fourth page containing only a comment element and nn empty fifth page.
     For each text or choice element, "1" is a valid input (or list of "1"'s for a grid)
     """
+
     form_type = 'fill'
 
     @staticmethod
@@ -51,8 +52,6 @@ class TestFill(BaseFormTest):
     def test_fill_callback(self, form):
         form.fill(self.custom_callback)
 
-    # TODO test Value.UNCHANGED and form.is_validated
-
     def test_callback_missing_return(self, form):
         with pytest.raises(ValueError, match=r'missing.+return statement'):
             form.fill(lambda e, i, j: None)
@@ -81,6 +80,39 @@ class TestSubmitErrors(BaseFormTest):
     def test_submit_not_validated(self, form):
         with pytest.raises(FormNotValidated):
             form.submit()
+
+
+class TestFormValidation(BaseFormTest):
+    """
+    The form has two pages.
+    The first page contains a short text input and a radio input
+    with options "Loop" (go to page 1) and "Next" (go to next page).
+    Both elements are optional. The second page is empty.
+    """
+
+    form_type = 'form_validation'
+
+    def test_element_invalidation(self, form):
+        form.validate()  # will pass, since the elements are optional
+        assert form.is_validated
+        short = form.pages[0].elements[0]
+        short.set_value('some_text')
+        assert not form.is_validated
+        short.validate()
+        assert form.is_validated
+
+    def test_loop_invalidation(self, form):
+        form.validate()
+        assert form.is_validated
+        radio = form.pages[0].elements[1]
+        radio.set_value('Next')
+        assert not form.is_validated
+        # If an element has actions and they are not ignored,
+        # the whole form needs to be validated.
+        radio.validate()
+        assert not form.is_validated
+        form.validate()
+        assert form.is_validated
 
 
 # TODO add submit() tests
