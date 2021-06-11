@@ -5,14 +5,14 @@ from typing import Callable, Optional, Set, Dict, List
 from urllib.parse import urlsplit, urlunsplit, parse_qs, urlencode
 
 import requests
-import requests.cookies
+from requests.status_codes import codes
 from bs4 import BeautifulSoup
 
 from .elements_base import InputElement
 from .elements import _Action, Element, Page, UserEmail, Value, parse as parse_element
 from .elements import CallbackRetVal, default_callback
 from .errors import ClosedForm, InfiniteLoop, ParseError, FormNotLoaded, FormNotValidated, \
-    InvalidURL, EditingDisabled
+    InvalidURL, EditingDisabled, SigninRequired
 from .util import add_indent, page_separator, list_get
 
 
@@ -344,7 +344,6 @@ class Form:
             session=None, *,
             need_receipt=False,
             captcha_handler: Optional[Callable[[requests.models.Response], str]] = None,
-            signin_handler: Optional[Callable[[], requests.cookies.RequestsCookieJar]]=None,
             emulate_history=False
     ) -> SubmissionResult:
         """Submits the form.
@@ -362,8 +361,6 @@ class Form:
                 NOTE Response and Response.request contain user's input.
                 It should not be passed to third-party services unprocessed,
                 since this may lead to privacy or security issues.
-            signin_handler:
-                A function which returns cookies for a signed-in Google account.
             emulate_history:
                 Use only one request to submit the form
                 (two requests for multipage forms with a captcha).
@@ -375,7 +372,9 @@ class Form:
             requests.exceptions.RequestException: A request failed.
             RuntimeError: The predicted next page differs from the real one
                 or a session(s) response with an incorrect code was received.
-            ValueError: one of the handlers is required, but was not provided.
+            ValueError: A captcha handler is required, but was not provided.
+            gforms.errors.SigninRequired:
+                The form requires sign in, this feature is not implemented.
             gforms.errors.ClosedForm: The form is closed.
             gforms.errors.EditingDisabled: Response editing is disabled.
             gforms.errors.FormNotLoaded: The form was not loaded.
@@ -390,10 +389,12 @@ class Form:
             need_receipt = self.settings.send_receipt is Settings.SendReceipt.ALWAYS
         if need_receipt and captcha_handler is None:
             raise ValueError('captcha_handler is missing')
+
+        if self.settings.signin_required:
+            raise SigninRequired(self)
+
         if session is None:
             session = requests
-        if self.settings.signin_required:  # TODO auth
-            raise NotImplementedError('A Google account is required to submit this form')
 
         if emulate_history:
             last_response, page, history, draft = self._emulate_history(session, need_receipt)
@@ -617,6 +618,8 @@ class Form:
         if self._editing_disabled(response):
             raise EditingDisabled(self)
         if response.status_code != 200:
+            if response.status_code == codes.unauthorized:
+                raise SigninRequired(self)
             raise RuntimeError('Invalid response code', response)
         return response
 
