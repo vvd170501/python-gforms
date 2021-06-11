@@ -45,6 +45,11 @@ class ClosedForm(ParseError):
         return f'Form "{self.form.title}" is closed'
 
 
+class SigninRequired(FormError):
+    def _message(self):
+        return f'Form "{self.form.title}" requires sign in to submit a response'
+
+
 class EditingDisabled(ParseError):
     def _message(self):
         fmt = f'"{self.form.title}"' if self.form.title is not None else 'with URL ' + self.form.url
