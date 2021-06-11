@@ -45,7 +45,7 @@ class ClosedForm(ParseError):
         return f'Form "{self.form.title}" is closed'
 
 
-class SigninRequired(FormError):
+class SigninRequired(FormError, NotImplementedError):
     def _message(self):
         return f'Form "{self.form.title}" requires sign in to submit a response'
 
