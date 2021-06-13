@@ -1,3 +1,3 @@
 from .form import Form
 
-__version__ = '0.10.3'
+__version__ = '1.0.0'
