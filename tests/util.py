@@ -6,22 +6,6 @@ import requests
 from gforms import Form
 
 
-class StaticSession(requests.Session):
-    """A session which caches responses for GET requests."""
-
-    def __init__(self):
-        super().__init__()
-        self._cache = {}
-
-    def get(self, url, **kwargs):
-        key = (url, *kwargs.items())
-        if key in self._cache:
-            return self._cache[key]
-        resp = super(StaticSession, self).get(url, **kwargs)
-        self._cache[key] = resp
-        return resp
-
-
 def skip_requests_exceptions(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
@@ -33,17 +17,38 @@ def skip_requests_exceptions(func):
     return wrapper
 
 
-def dump(url):
-    """Dumps raw form data (for saving to form_dumps.py)"""
+def rewrite_links(data):
+    from . import fake_urls
+    from . import urls
+
+    if isinstance(data, list):
+        return [rewrite_links(elem) for elem in data]
+    if isinstance(data, dict):
+        return {rewrite_links(key): rewrite_links(value) for key, value in data.items()}
+    if isinstance(data, str):
+        data = data.replace(urls._yt_link, fake_urls._yt_link)
+        if len(data) == 48:  # image id
+            return '0' * len(data)
+        return data
+    return data
+
+
+def form_with_dump(url, session=None):
     form_data = []
 
-    def _dump(data):
+    form = Form()
+    orig_parse = form._parse
+
+    def dump(data):
+        # replace video url
+        data = rewrite_links(data)
+        # erase the form url
+        data[Form._DocIndex.URL] = '0' * len(data[Form._DocIndex.URL])
         nonlocal form_data
         form_data = data
+        return orig_parse(data)
 
-    form = Form()
-    form._parse = _dump
-    form.load(url)
+    form._parse = dump
+    form.load(url, session=session)
 
-    form_data[Form._DocIndex.URL] = '0' * len(form_data[Form._DocIndex.URL])
-    return form_data
+    return form, form_data

@@ -15,6 +15,7 @@ from gforms.errors import ClosedForm, ParseError, InvalidURL
 from gforms.options import ActionOption
 from gforms.validators import GridValidator, TextValidator, GridTypes, CheckboxTypes
 
+from . import fake_urls
 from .conftest import BaseFormTest
 
 
@@ -105,9 +106,9 @@ class TestNonInput(ElementTest):
     form_type = 'non_input'
     expected = [[Comment, Image, Video]]
 
-    def test_video(self, first_page, urls):
+    def test_video(self, first_page):
         video = first_page[2]
-        assert video.url() == urls.yt_url
+        assert video.url() == fake_urls.yt_url
 
 
 class TestTextInput(ElementTest):

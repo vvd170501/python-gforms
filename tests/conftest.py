@@ -11,7 +11,7 @@ import requests
 from gforms import Form
 
 from . import fake_urls, form_dumps
-from .util import StaticSession, skip_requests_exceptions
+from .util import skip_requests_exceptions
 
 
 # -------------------- Skippable tests --------------------
@@ -157,22 +157,13 @@ with open(url_module, 'rb') as f:
     urls_available = f.read(10) != b'\x00GITCRYPT\x00'
 
 
-@pytest.fixture(scope='session')
-def urls():
-    if urls_available:
-        from . import urls
-        return urls
-    else:
-        return fake_urls
-
-
 USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ' \
              'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36'
 
 
 @pytest.fixture(scope='package')
 def session():
-    sess = StaticSession()
+    sess = requests.Session()
     sess.headers['User-Agent'] = USER_AGENT
     return sess
 
@@ -207,18 +198,27 @@ def fake_session():
 
 
 @pytest.fixture(scope='package')
-def load_form(session, fake_session):
+def load_form(session):
 
     @skip_requests_exceptions
     def load_form(url):
         form = Form()
-        if any(cls.marker in url for cls in fake_urls.placeholders):
-            form.load(url, session=fake_session)
-        else:
-            form.load(url, session=session)
+        form.load(url, session=session)
         return form
 
     return load_form
+
+
+@pytest.fixture(scope='package')
+def load_dump(fake_session):
+
+    def load_dump(form_type):
+        url = getattr(fake_urls.FormUrl, form_type)
+        form = Form()
+        form.load(url, session=fake_session)
+        return form
+
+    return load_dump
 
 
 class BaseFormTest(Skippable, ABC):
@@ -228,9 +228,8 @@ class BaseFormTest(Skippable, ABC):
         raise NotImplementedError()
 
     @pytest.fixture(scope='class')
-    def form(self, load_form, urls):
-        link = getattr(urls.FormUrl, self.form_type)
-        return load_form(link)
+    def form(self, load_dump):
+        return load_dump(self.form_type)
 
     def test_to_str(self, form):
         # NOTE These tests only assert that to_str doesn't fail. The return value is not checked
