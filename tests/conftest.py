@@ -221,7 +221,7 @@ def load_dump(fake_session):
     return load_dump
 
 
-class BaseFormTest(Skippable, ABC):
+class FormParseTest(Skippable, ABC):
     @property
     @abstractmethod
     def form_type(self) -> str:
@@ -234,3 +234,18 @@ class BaseFormTest(Skippable, ABC):
     def test_to_str(self, form):
         # NOTE These tests only assert that to_str doesn't fail. The return value is not checked
         _ = form.to_str()
+
+
+class FormTest(ABC):
+    @property
+    @abstractmethod
+    def form_type(self) -> str:
+        raise NotImplementedError()
+
+    @pytest.fixture(scope='class')
+    def form(self, load_form):
+        if not urls_available:
+            pytest.skip('Urls are not available')
+        from . import urls
+        url = getattr(urls.FormUrl, self.form_type)
+        return load_form(url)

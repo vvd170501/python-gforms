@@ -16,7 +16,7 @@ from gforms.options import ActionOption
 from gforms.validators import GridValidator, TextValidator, GridTypes, CheckboxTypes
 
 from . import fake_urls
-from .conftest import BaseFormTest
+from .conftest import FormParseTest
 
 
 class TestFormLoad:
@@ -33,7 +33,7 @@ class TestFormLoad:
             load_form('https://docs.google.com/forms/d/e/1FAIpQLSeq_yONm2qxkvvuY5BI9E3-rDD7RxIQHo9-R_-hy1mZlborKA/viewform')
 
 
-class TestEmpty(BaseFormTest):
+class TestEmpty(FormParseTest):
     form_type = 'empty'
 
     def test_empty(self, form):
@@ -43,7 +43,7 @@ class TestEmpty(BaseFormTest):
         assert len(form.pages) == 1 and len(form.pages[0].elements) == 0
 
 
-class TestPages(BaseFormTest):
+class TestPages(FormParseTest):
     form_type = 'pages'
 
     def test_page_count(self, form):
@@ -67,7 +67,7 @@ class TestPages(BaseFormTest):
         assert pages[6].next_page() is None  # last page
 
 
-class ElementTest(BaseFormTest):
+class ElementTest(FormParseTest):
     expected: List[List[Type[Element]]]
 
     @pytest.fixture(scope='class')
@@ -396,7 +396,7 @@ class TestEmail(ElementTest):
     expected = [[UserEmail]]
 
 
-class TestPrefilled(BaseFormTest):
+class TestPrefilled(FormParseTest):
     """
     The form contains one short text input.
     The link fills this input with "text_value".
@@ -410,7 +410,7 @@ class TestPrefilled(BaseFormTest):
         assert short._value == [value]
 
 
-class TestEdit(BaseFormTest):
+class TestEdit(FormParseTest):
     """
     The form is the same as in prefill test.
     The input was filled with "text_value" and the response was submitted.

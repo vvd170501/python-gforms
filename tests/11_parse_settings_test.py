@@ -2,10 +2,10 @@ import pytest
 
 from gforms.form import Settings
 
-from .conftest import BaseFormTest
+from .conftest import FormParseTest
 
 
-class SettingsTest(BaseFormTest):
+class SettingsTest(FormParseTest):
     @pytest.fixture(autouse=True)
     def settings(self):
         self.settings = Settings()

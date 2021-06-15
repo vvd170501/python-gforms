@@ -7,12 +7,12 @@ from gforms.elements_base import Grid
 from gforms.elements import DateTime, Duration, Date, Time
 from gforms.errors import FormNotLoaded, FormNotValidated
 
-from .conftest import BaseFormTest
+from .conftest import FormParseTest
 
 
 # NOTE will most probably fail if elements aren't parsed correctly
 # Xfail this class if any test_elements() in 10_load_test fails?
-class TestFill(BaseFormTest):
+class TestFill(FormParseTest):
     """
     A form with all types of input elements.
     Ones that can be filled by default_callback (choice types) are marked as required.
@@ -69,7 +69,7 @@ class TestFillNotLoaded:
             form.fill()
 
 
-class TestSubmitErrors(BaseFormTest):
+class TestSubmitErrors(FormParseTest):
     form_type = 'fill'
 
     def test_submit_not_loaded(self):
@@ -82,7 +82,7 @@ class TestSubmitErrors(BaseFormTest):
             form.submit()
 
 
-class TestFormValidation(BaseFormTest):
+class TestFormValidation(FormParseTest):
     """
     The form has two pages.
     The first page contains a short text input and a radio input
@@ -113,6 +113,3 @@ class TestFormValidation(BaseFormTest):
         assert not form.is_validated
         form.validate()
         assert form.is_validated
-
-
-# TODO add submit() tests
