@@ -14,7 +14,6 @@ from tests import form_dumps
 from tests.util import skip_requests_exceptions
 from .conftest import urls_available
 
-from . import urls
 from . import util
 
 
@@ -31,7 +30,10 @@ def parametrize_form_types(form_types):
 
 
 @pytest.fixture(scope='module')
+@skip_requests_exceptions
 def form_with_dump(session, request):
+    from . import urls
+
     form_type = request.param
     url = getattr(urls.FormUrl, form_type)
     return util.form_with_dump(url, session)
