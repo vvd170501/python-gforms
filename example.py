@@ -3,12 +3,17 @@
 import argparse
 import random
 import string
+import sys
 from math import ceil
 from time import sleep, asctime, time as time_now
 from datetime import date, datetime, time, timedelta
 
 import requests
-from fake_useragent import FakeUserAgent
+try:
+    from fake_useragent import FakeUserAgent
+except ImportError:
+    print('This program needs fake-useragent to run')
+    sys.exit(1)
 
 from gforms import Form
 from gforms.errors import InfiniteLoop, ClosedForm, ValidationError
@@ -119,7 +124,7 @@ def main():
     filler = Filler()
 
     # Show the form
-    print(form.to_str(2, True))
+    print(form.to_str(2))
 
     # Use filler to cache custom callback values, if needed (will be reused later)
     form.fill(filler.callback, fill_optional=True)
