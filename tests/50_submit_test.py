@@ -13,7 +13,14 @@ class TestSubmitEmpty(FormTest):
         form.submit(session)
 
 
-class WithEmultion(FormTest, ABC):
+class TestSubmitEmptyShort(FormTest):
+    form_type = 'empty_short'
+
+    def test_submit(self, form, session):
+        form.submit(session)
+
+
+class WithEmulation(FormTest, ABC):
     @staticmethod
     @abstractmethod
     def _callback(elem, i, j):
@@ -31,7 +38,7 @@ class WithEmultion(FormTest, ABC):
         form.submit(session, emulate_history=True)
 
 
-class TestSubmitMultipage(WithEmultion):
+class TestSubmitMultipage(WithEmulation):
     """The form contains two pages, on each of them there is a short text input."""
     form_type = 'submit_multipage'
 
@@ -40,7 +47,7 @@ class TestSubmitMultipage(WithEmultion):
         return 'Sample text'
 
 
-class TestSubmitEmail(WithEmultion):
+class TestSubmitEmail(WithEmulation):
     """The form contains two empty pages and requires an e-mail.
 
     The response receipt may be requested by user."""

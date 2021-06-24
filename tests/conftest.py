@@ -192,7 +192,7 @@ def fake_session():
         resp._content = generate_html(url).encode()
         return resp
 
-    sess = requests.session()
+    sess = requests.Session()
     sess.get = fake_get
     return sess
 

@@ -12,7 +12,7 @@ from .elements_base import InputElement
 from .elements import _Action, Element, Page, UserEmail, Value, parse as parse_element
 from .elements import CallbackRetVal, default_callback
 from .errors import ClosedForm, InfiniteLoop, ParseError, FormNotLoaded, FormNotValidated, \
-    InvalidURL, EditingDisabled, SigninRequired
+    InvalidURL, NoSuchForm, EditingDisabled, SigninRequired
 from .util import add_indent, page_separator, list_get
 
 
@@ -160,7 +160,7 @@ class Form:
     """A Google Form wrapper.
 
     Attributes:
-        url: URL of the form.
+        url: URL that was used to load the form.
         name: Name of the form (== document name, not shown on the submission page).
         title: Title of the form.
         description: Description of the form.
@@ -215,14 +215,16 @@ class Form:
         """Loads and parses the form.
 
         Args:
-            url: The form url. The url should look like
-                "https://docs.google.com/forms/.../viewform".
+            url: The form url. Usually looks like
+                "https://docs.google.com/forms/.../viewform"
+                or "https://forms.gle/...".
                 Pre-filled links and response editing are also supported.
             session: A session which is used to load the form.
                 If session is None, requests.get is used.
 
         Raises:
-            gforms.errors.InvalidURL: The url is invalid.
+            gforms.errors.InvalidURL: The url is not a valid form url.
+            gforms.errors.NoSuchForm: The form does not exist.
             requests.exceptions.RequestException: A request failed.
             gforms.errors.ParseError: The form could not be parsed.
             gforms.errors.ClosedForm: The form is closed.
@@ -234,17 +236,13 @@ class Form:
         self._clear()
 
         self.url = url
-        prefilled_data, is_edit = self._parse_url(url)
-        self._prefilled_data = prefilled_data
 
         self._first_page = session.get(self.url)
+        self._check_resp(self._first_page)
+        prefilled_data, is_edit = self._parse_url(self._first_page.url)
+        self._prefilled_data = prefilled_data
 
         soup = BeautifulSoup(self._first_page.text, 'html.parser')
-        if self._is_closed(self._first_page):
-            self.title = soup.find('title').text
-            raise ClosedForm(self)
-        if is_edit and self._editing_disabled(self._first_page):
-            raise EditingDisabled(self)
 
         data = self._raw_form(soup)
         self._fbzx = self._get_fbzx(soup)
@@ -377,6 +375,7 @@ class Form:
                 The form requires sign in, this feature is not implemented.
             gforms.errors.ClosedForm: The form is closed.
             gforms.errors.EditingDisabled: Response editing is disabled.
+            gforms.errors.NoSuchForm: The form does not exist (anymore).
             gforms.errors.FormNotLoaded: The form was not loaded.
             gforms.errors.FormNotValidated: The form was not validated.
         """
@@ -444,9 +443,23 @@ class Form:
         self._history = None
         self._draft = None
 
+    def _check_resp(self, resp):
+        # will raise NoSuchForm for any 404/410 response. Check domain?
+        if resp.status_code in [codes.not_found, codes.gone]:
+            raise NoSuchForm(resp.url)
+        if self._is_closed(resp):
+            if self.title is None:
+                # Method is called from load(). Is the title needed?
+                soup = BeautifulSoup(resp.text, 'html.parser')
+                self.title = soup.find('title').text
+            raise ClosedForm(self)
+        if self._editing_disabled(resp):
+            # if raised from Form.load, there is (?) no way to get the form title without additional requests
+            raise EditingDisabled(self)
+
     @staticmethod
     def _parse_url(url: str):
-        """Checks the URL and extracts prefilled data."""
+        """Checks if the URL is a form url and extracts prefilled data."""
         url_data = urlsplit(url)
         if not url_data.path.endswith('viewform'):
             raise InvalidURL(url)
@@ -613,12 +626,9 @@ class Form:
         if need_receipt and not continue_:
             payload['g-recaptcha-response'] = captcha_response
 
-        url = self._response_url(self.url)
+        url = self._response_url(self._first_page.url)
         response = session.post(url, data=payload)
-        if self._is_closed(response):
-            raise ClosedForm(self)
-        if self._editing_disabled(response):
-            raise EditingDisabled(self)
+        self._check_resp(response)
         if response.status_code != 200:
             if response.status_code == codes.unauthorized:
                 raise SigninRequired(self)

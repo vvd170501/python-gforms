@@ -25,8 +25,12 @@ class InvalidURL(FormsError):
         self.url = url
 
     def _message(self):
-        return f'Invalid URL: "{self.url}".' \
-               ' A valid URL should look like https://docs.google.com/forms/.../viewform)'
+        return f'Not a valid form URL: "{self.url}".'
+
+
+class NoSuchForm(InvalidURL):
+    def _message(self):
+        return f'A form with URL "{self.url}" does not exist.'
 
 
 class FormError(FormsError):
@@ -34,37 +38,43 @@ class FormError(FormsError):
         super().__init__(*args, **kwargs)
         self.form = form
 
+    @property
+    def form_descr(self):
+        if self.form.title is not None:
+            return f'"{self.form.title}"'
+        elif self.form.url is not None:
+            return 'with URL ' + self.form.url
+        return ''
+
 
 class ParseError(FormError):
     def _message(self):
-        return f'Cannot parse form with URL {self.form.url}'
+        return 'Cannot parse form ' + self.form_descr
 
 
 class ClosedForm(ParseError):
     def _message(self):
-        return f'Form "{self.form.title}" is closed'
+        return f'Form {self.form_descr} is closed'
 
 
 class SigninRequired(FormError, NotImplementedError):
     def _message(self):
-        return f'Form "{self.form.title}" requires sign in to submit a response'
+        return f'Form {self.form_descr} requires sign in to submit a response'
 
 
 class EditingDisabled(ParseError):
     def _message(self):
-        fmt = f'"{self.form.title}"' if self.form.title is not None else 'with URL ' + self.form.url
-        return 'Cannot edit a response for form ' + fmt
+        return 'Cannot edit a response for form ' + self.form_descr
 
 
 class FormNotLoaded(FormError):
     def _message(self):
-        return f'Form with URL "{self.form.url}" was not loaded'
+        return f'Form {self.form_descr} was not loaded'
 
 
 class FormNotValidated(FormError):
     def _message(self):
-        return f'Form "{self.form.title}" was not validated'\
-               ' or some elements were filled with invalid values.'
+        return f'The form needs to be validated.'
 
 
 class ElementError(FormsError):

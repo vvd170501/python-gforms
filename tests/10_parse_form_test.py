@@ -3,7 +3,6 @@ from typing import List, Type
 
 import pytest
 
-from gforms import Form
 from gforms.elements_base import Element
 from gforms.elements import Page, UserEmail
 from gforms.elements import Comment, Image, Video
@@ -11,26 +10,11 @@ from gforms.elements import Short, Paragraph
 from gforms.elements import Checkboxes, Dropdown, Radio, Scale
 from gforms.elements import CheckboxGrid, RadioGrid
 from gforms.elements import Date, DateTime, Time, Duration
-from gforms.errors import ClosedForm, ParseError, InvalidURL
 from gforms.options import ActionOption
 from gforms.validators import GridValidator, TextValidator, GridTypes, CheckboxTypes
 
 from . import fake_urls
 from .conftest import FormParseTest
-
-
-class TestFormLoad:
-    def test_invalid_url(self, load_form):
-        with pytest.raises(InvalidURL):
-            load_form('https://docs.google.com/forms/d/e/not_a_form')
-
-    def test_parse_error(self, load_form):
-        with pytest.raises(ParseError):
-            load_form('https://docs.google.com/forms/d/e/invalid_form_id/viewform')
-
-    def test_closed(self, load_form):
-        with pytest.raises(ClosedForm):
-            load_form('https://docs.google.com/forms/d/e/1FAIpQLSeq_yONm2qxkvvuY5BI9E3-rDD7RxIQHo9-R_-hy1mZlborKA/viewform')
 
 
 class TestEmpty(FormParseTest):
