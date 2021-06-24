@@ -76,7 +76,7 @@ class Element:
         TIME = 10
         IMAGE = 11
         VIDEO = 12
-        # TODO add file upload element
+        FILE_UPLOAD = 13
 
     class _Index:
         ID = 0

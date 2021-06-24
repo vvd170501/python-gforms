@@ -7,7 +7,7 @@ from warnings import warn
 
 from .elements_base import _Action, Value, MultiChoiceInput
 from .elements_base import Element, MediaElement, InputElement, \
-                           ActionChoiceInput, ChoiceInput1D, \
+                           ActionChoiceInput, ChoiceInput1D, SingleInput, \
                            OtherChoiceInput, ValidatedInput, TextInput, \
                            DateInput, Grid, TimeInput
 from .elements_base import ChoiceValue, EmptyValue, MultiChoiceValue, TextValue, \
@@ -27,6 +27,7 @@ __all__ = ['CallbackRetVal', 'Value',
            'Short', 'Paragraph', 'Radio', 'Dropdown', 'Checkboxes', 'Scale',
            'RadioGrid', 'CheckboxGrid',
            'Time', 'Duration', 'Date', 'DateTime',
+           'FileUpload',
            'default_callback', 'parse']
 
 
@@ -567,6 +568,13 @@ class DateTime(DateInput):
         return answer
 
 
+class FileUpload(SingleInput):
+    # As of June 2021, forms with a file upload require sign in for loading,
+    # so this class is actually never used
+    def set_value(self, value):
+        raise NotImplementedError()
+
+
 def _grid_validated_choices(elem: Grid):
     n = len(elem.rows)
     if isinstance(elem, RadioGrid):
@@ -689,6 +697,8 @@ _element_mapping = {getattr(Element.Type, el_type.__name__.upper()): el_type for
     Radio, Dropdown, Checkboxes, Scale,
     Comment, Page, Image, Video,
 ]}
+
+_element_mapping[Element.Type.FILE_UPLOAD] = FileUpload
 
 
 def parse(elem):

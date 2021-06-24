@@ -45,3 +45,6 @@ class TestShortLoadOk(FormTest):
 
     def test_load(self, form):
         pass
+
+
+# !! test signin (file upload)

@@ -59,7 +59,7 @@ class ClosedForm(ParseError):
 
 class SigninRequired(FormError, NotImplementedError):
     def _message(self):
-        return f'Form {self.form_descr} requires sign in to submit a response'
+        return f'Form {self.form_descr} requires sign in'
 
 
 class EditingDisabled(ParseError):

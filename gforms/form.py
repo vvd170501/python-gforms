@@ -229,6 +229,9 @@ class Form:
             gforms.errors.ParseError: The form could not be parsed.
             gforms.errors.ClosedForm: The form is closed.
             gforms.errors.EditingDisabled: Response editing is disabled.
+            gforms.errors.SigninRequired:
+                The form requires sign in to be loaded.
+                (most probably, it contains a file upload element).
         """
         if session is None:
             session = requests
@@ -447,6 +450,11 @@ class Form:
         # will raise NoSuchForm for any 404/410 response. Check domain?
         if resp.status_code in [codes.not_found, codes.gone]:
             raise NoSuchForm(resp.url)
+        if (
+            resp.status_code == codes.unauthorized or  # submit, settings were updated
+            urlsplit(resp.url).netloc == 'accounts.google.com'  # load, form contains a FileUpload
+        ):
+            raise SigninRequired(self)
         if self._is_closed(resp):
             if self.title is None:
                 # Method is called from load(). Is the title needed?
@@ -630,8 +638,6 @@ class Form:
         response = session.post(url, data=payload)
         self._check_resp(response)
         if response.status_code != 200:
-            if response.status_code == codes.unauthorized:
-                raise SigninRequired(self)
             raise RuntimeError('Invalid response code', response)
         return response
 

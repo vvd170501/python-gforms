@@ -60,3 +60,6 @@ class TestSubmitEmail(WithEmulation):
     def test_no_handler(self, form, session):
         with pytest.raises(ValueError, match='handler is missing'):
             form.submit(session, need_receipt=True)
+
+
+# !! test signin
