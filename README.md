@@ -27,7 +27,6 @@ python3 -m pip install gforms
  - Forms with file upload cannot be parsed (sign-in is required for loading the form)
  - A CAPTCHA needs to be solved in order to send an e-mail with a response copy (when this option is enabled). CAPTCHA handling should be implemented separately
  - Form style is not parsed
- - Link for viewing quiz results (after a successful submission) is not parsed (may be added in future releases)
 
 
 ## Example

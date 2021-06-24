@@ -43,7 +43,7 @@ class Settings:
         confirmation_msg:
             The message which is shown after a successful submission.
         is_quiz: Self-explanatory.
-        immediate_grades: The user may view their grades immediately.
+        immediate_grades: The user may view their grades (score) immediately.
         show_missed: "Identify which questions were answered incorrectly"
             (from the form creation page).
         show_correct_answers: Self-explanatory.
@@ -85,7 +85,7 @@ class Settings:
         # any block may be missing
         first_block = form_data[self._Index.FIRST_BLOCK]
         second_block = form_data[self._Index.SECOND_BLOCK]
-        quiz = list_get(form_data, self._Index.QUIZ_BLOCK, None)
+        quiz = list_get(form_data, self._Index.QUIZ_BLOCK, [])
 
         if first_block is not None:
             self.confirmation_msg = first_block[self._Index.CONFIRMATION_MSG] or None
@@ -98,8 +98,7 @@ class Settings:
             self.shuffle_questions = bool(second_block[self._Index.SHUFFLE_QUESTIONS])
             self.send_receipt = self.SendReceipt(second_block[self._Index.RECEIPT])
             self.collect_emails = bool(second_block[self._Index.COLLECT_EMAILS])
-        if quiz is not None and len(quiz) > self._Index.IS_QUIZ:
-            self.is_quiz = bool(quiz[self._Index.IS_QUIZ])
+        self.is_quiz = bool(list_get(quiz, self._Index.IS_QUIZ, False))
         if self.is_quiz:
             self.immediate_grades = bool(quiz[self._Index.IMMEDIATE_GRADES])
             grades_settings = quiz[self._Index.GRADES_SETTINGS]
@@ -138,12 +137,15 @@ class SubmissionResult:
         resubmit: A link to submit another response.
         summary: A link to view summary charts.
         edit: A link to edit the response.
+        quiz_score: A link to view the quiz score (if available).
     """
 
     def __init__(self, soup):
         self.resubmit = None
         self.summary = None
         self.edit = None
+        self.quiz_score = None
+
         # Is the div class fixed?
         container = soup.find('div', class_='freebirdFormviewerViewResponseLinksContainer')
         for link in container.find_all('a'):
@@ -152,6 +154,8 @@ class SubmissionResult:
                 self.summary = href
             elif 'edit2' in href:
                 self.edit = href
+            elif 'viewscore' in href:
+                self.quiz_score = href
             else:
                 self.resubmit = href
 
