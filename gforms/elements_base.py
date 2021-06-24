@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from enum import Enum, auto
 from typing import Dict, List, Literal, Union, cast, Any, Optional, Tuple, TYPE_CHECKING
 
-from .util import list_get
+from .util import DefaultEnum, list_get
 from .validators import Validator, GridValidator, TextValidator, GridTypes, NumberTypes
 from .errors import DuplicateOther, EmptyOther, InvalidChoice, \
     ElementTypeError, ElementValueError, RequiredElement, RequiredRow, RowTypeError, \
@@ -61,8 +61,8 @@ class Element:
         type: The element type.
     """
 
-    class Type(Enum):
-        # NOTE File upload element is not implemented
+    class Type(DefaultEnum):
+        UNKNOWN = -1
         SHORT = 0
         PARAGRAPH = 1
         RADIO = 2
@@ -76,6 +76,7 @@ class Element:
         TIME = 10
         IMAGE = 11
         VIDEO = 12
+        # TODO add file upload element
 
     class _Index:
         ID = 0

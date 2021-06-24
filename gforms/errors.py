@@ -190,6 +190,16 @@ class InvalidDuration(InvalidValue):
                ' value should be positive and less than 73 hours'
 
 
+class UnknownElement(UserWarning):
+    def __init__(self, el_data, el_type):
+        super().__init__()
+        self.el_data = el_data
+        self.el_type = el_type
+
+    def __str__(self):
+        return f'Found an element with unknown type ({self.el_type}). Raw element data: {self.el_data}'
+
+
 class ValidatorWarning(UserWarning):
     pass
 

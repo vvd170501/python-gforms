@@ -3,25 +3,27 @@ from __future__ import annotations
 import random
 from datetime import date, datetime, time, timedelta
 from typing import List, Union, Optional, Dict, Tuple
+from warnings import warn
 
 from .elements_base import _Action, Value, MultiChoiceInput
 from .elements_base import Element, MediaElement, InputElement, \
-                           ActionChoiceInput, ChoiceInput, ChoiceInput1D, \
+                           ActionChoiceInput, ChoiceInput1D, \
                            OtherChoiceInput, ValidatedInput, TextInput, \
                            DateInput, Grid, TimeInput
 from .elements_base import ChoiceValue, EmptyValue, MultiChoiceValue, TextValue, \
                            GridChoiceValue, GridMultiChoiceValue
 
 from .errors import ElementTypeError, InvalidDuration, \
-    RequiredElement, InvalidText, MisconfiguredElement, UnknownValidator, InvalidArguments
+                    InvalidText, MisconfiguredElement, \
+                    UnknownValidator, InvalidArguments, UnknownElement
 from .options import ActionOption
 from .util import RADIO_SYMBOLS, CHECKBOX_SYMBOLS, add_indent, elem_separator, random_subset, \
     list_get
 from .validators import CheckboxValidator, CheckboxTypes
 
 
-__all__ = ['Element', 'CallbackRetVal', 'Value',
-           'UserEmail', 'Page', 'Comment', 'Image', 'Video',
+__all__ = ['CallbackRetVal', 'Value',
+           'Unknown', 'UserEmail', 'Page', 'Comment', 'Image', 'Video',
            'Short', 'Paragraph', 'Radio', 'Dropdown', 'Checkboxes', 'Scale',
            'RadioGrid', 'CheckboxGrid',
            'Time', 'Duration', 'Date', 'DateTime',
@@ -169,6 +171,10 @@ class Page(Element):
 
 Page.SUBMIT = Page(id_=_Action.SUBMIT, name=None, description=None,
                    type_=Element.Type.PAGE, prev_action=None).with_index(_Action.SUBMIT)
+
+
+class Unknown(Element):
+    pass
 
 
 class Comment(Element):
@@ -678,6 +684,7 @@ def default_callback(elem: InputElement, page_index, elem_index) -> Union[ElemVa
 
 
 _element_mapping = {getattr(Element.Type, el_type.__name__.upper()): el_type for el_type in [
+    Unknown,
     Short, Paragraph,
     Radio, Dropdown, Checkboxes, Scale,
     Comment, Page, Image, Video,
@@ -695,4 +702,6 @@ def parse(elem):
         cls = Duration if TimeInput.parse_duration_flag(elem) else Time
     else:
         cls = _element_mapping[el_type]
+    if el_type is Element.Type.UNKNOWN:
+        warn(UnknownElement(elem, elem[Element._Index.TYPE]))
     return cls.parse(elem)
