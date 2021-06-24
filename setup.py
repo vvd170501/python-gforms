@@ -19,7 +19,7 @@ setup(
     url='https://github.com/vvd170501/python-gforms',
 
     classifiers=[
-        'Development Status :: 4 - Beta',
+        'Development Status :: 5 - Production/Stable',
         'License :: OSI Approved :: MIT License',
         'Programming Language :: Python :: 3 :: Only',
         'Programming Language :: Python :: 3.6',
