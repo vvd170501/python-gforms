@@ -13,8 +13,8 @@ class TestSubmitEmpty(FormTest):
         form.submit(session)
 
 
-class TestSubmitEmptyShort(FormTest):
-    form_type = 'empty_short'
+class TestSubmitShortLink(FormTest):
+    form_type = 'empty_short'  # A short link for the same empty form
 
     def test_submit(self, form, session):
         form.submit(session)
@@ -34,7 +34,7 @@ class WithEmulation(FormTest, ABC):
         form.submit(session)
 
     def test_submit_emulated(self, form, session):
-        # TODo check submission result? (export responses to a spreadsheet, use gspread)
+        # TODO check submission result? (export responses to a spreadsheet, use gspread)
         form.submit(session, emulate_history=True)
 
 
@@ -62,4 +62,4 @@ class TestSubmitEmail(WithEmulation):
             form.submit(session, need_receipt=True)
 
 
-# !! test signin
+# TODO test if exceptions are raised on signin redirect

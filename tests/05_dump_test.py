@@ -5,27 +5,27 @@ and forms can be correctly parsed.
 
 
 import json
+from typing import Iterable
 
 import pytest
-import requests.models
 
 from gforms import Form
-from tests import form_dumps
-from tests.util import skip_requests_exceptions
-from .conftest import urls_available
 
 from . import util
+from . import form_dumps
+from .util import skip_requests_exceptions
+from .conftest import require_urls
 
 
-pytestmark = pytest.mark.skipif(not urls_available, reason='Urls are not available')
+pytestmark = require_urls
 
 
-def parametrize_form_types(form_types):
+def parametrize_form_types(form_types: Iterable):
     return pytest.mark.parametrize(
         'form_with_dump, form_type',
         zip(form_types, form_types),
         indirect=['form_with_dump'],
-        ids=form_types
+        ids=list(form_types)
     )
 
 
@@ -39,11 +39,7 @@ def form_with_dump(session, request):
     return util.form_with_dump(url, session)
 
 
-element_test_forms = [name for name in form_dumps.FormData.Elements.__dict__ if not name.startswith('_')]
-settings_test_forms = [name for name in form_dumps.FormData.Settings.__dict__ if not name.startswith('_')]
-
-
-@parametrize_form_types(element_test_forms)
+@parametrize_form_types(form_dumps.FormData.Elements)
 def test_elements_dump(form_with_dump, form_type):
 
     def extract_elements(data):
@@ -54,7 +50,7 @@ def test_elements_dump(form_with_dump, form_type):
     assert extract_elements(dump) == extract_elements(getattr(form_dumps.FormData, form_type))
 
 
-@parametrize_form_types(settings_test_forms)
+@parametrize_form_types(form_dumps.FormData.Settings)
 def test_settings_dump(form_with_dump, form_type):
     form, dump = form_with_dump
     assert dump == getattr(form_dumps.FormData, form_type)

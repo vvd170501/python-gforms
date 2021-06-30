@@ -157,6 +157,9 @@ with open(url_module, 'rb') as f:
     urls_available = f.read(10) != b'\x00GITCRYPT\x00'
 
 
+require_urls = pytest.mark.skipif(not urls_available, reason='Urls are not available')
+
+
 USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ' \
              'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36'
 

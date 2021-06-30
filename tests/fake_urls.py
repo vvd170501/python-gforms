@@ -46,6 +46,8 @@ class FormUrl(metaclass=UrlMeta):
     date: str
     time: str
 
+    file_upload: str
+
     text_validation: str
     grid_validation: str
     checkbox_validation: str

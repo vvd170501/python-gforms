@@ -2,9 +2,9 @@ import re
 
 import pytest
 
-from gforms.errors import ClosedForm, InvalidURL, NoSuchForm, EditingDisabled
+from gforms.errors import ClosedForm, InvalidURL, NoSuchForm, EditingDisabled, SigninRequired
 
-from .conftest import FormTest, urls_available
+from .conftest import FormTest, require_urls
 
 
 class TestLoadErrors:
@@ -22,12 +22,18 @@ class TestLoadErrors:
         with pytest.raises(ClosedForm, match='00_Closed'):
             load_form('https://docs.google.com/forms/d/e/1FAIpQLSeq_yONm2qxkvvuY5BI9E3-rDD7RxIQHo9-R_-hy1mZlborKA/viewform')
 
+    @require_urls
     def test_editing_disabled(self, load_form):
-        if not urls_available:
-            pytest.skip('Urls are not available')
-        from . import urls
+        from . import urls  # use a fixture?
         url = urls.FormUrl.editing_disabled
         with pytest.raises(EditingDisabled, match=re.escape(url)):
+            load_form(url)
+
+    @require_urls
+    def test_signin_required(self, load_form):
+        from . import urls
+        url = urls.FormUrl.file_upload
+        with pytest.raises(SigninRequired):
             load_form(url)
 
 
@@ -45,6 +51,3 @@ class TestShortLoadOk(FormTest):
 
     def test_load(self, form):
         pass
-
-
-# !! test signin (file upload)

@@ -10,6 +10,7 @@ from gforms.elements import Short, Paragraph
 from gforms.elements import Checkboxes, Dropdown, Radio, Scale
 from gforms.elements import CheckboxGrid, RadioGrid
 from gforms.elements import Date, DateTime, Time, Duration
+from gforms.elements import FileUpload
 from gforms.options import ActionOption
 from gforms.validators import GridValidator, TextValidator, GridTypes, CheckboxTypes
 
@@ -273,6 +274,11 @@ class TestDate(ElementTest):
 class TestTime(ElementTest):
     form_type = 'time'
     expected = [[Time, Duration]]
+
+
+class TestFileUpload(ElementTest):
+    form_type = 'file_upload'
+    expected = [[], [FileUpload]]
 
 
 class TestTextValidators(ElementTest):
