@@ -688,7 +688,7 @@ class Form:
     @staticmethod
     def _raw_form(soup):
         scripts = soup.find_all('script')
-        pattern = re.compile(r'FB_PUBLIC_LOAD_DATA_ = (\[.+\])\n;', re.S)
+        pattern = re.compile(r'FB_PUBLIC_LOAD_DATA_\s*=\s*(\[.+\])\s*;', re.S)
         for script in scripts:
             if script.string is None:
                 continue
