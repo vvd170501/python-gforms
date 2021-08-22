@@ -230,10 +230,11 @@ class InputElement(Element, ABC):
     def prefill(self, prefilled_data: Dict[str, List[str]]):
         """Fills the element with values from the prefilled link."""
         values = [prefilled_data.get(entry_id, []) for entry_id in self._entry_ids]
+        # FIXME prefilled element on an skipped page doesn't need to be validated
         # prefilled data still needs to be validated
         # (e.g. a modified url was used or elements were updated)
-        # Also, there may be no prefilled values for a required element.
-        self._set_values(values)
+        if any(values):  # Don't invalidate an element if it's not prefilled. Find a better solution?
+            self._set_values(values)
 
     @staticmethod
     def _submit_id(entry_id):

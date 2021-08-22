@@ -293,6 +293,8 @@ class Form:
         )
         return f'{title}\n{lines}'
 
+    # TODO add reset() method (clear all inputs or set to prefilled values)
+
     def fill(
             self,
             callback: Optional[CallbackType] = None,
