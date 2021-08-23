@@ -44,7 +44,7 @@ class FormError(FormsError):
             return f'"{self.form.title}"'
         elif self.form.url is not None:
             return 'with URL ' + self.form.url
-        return ''
+        return '<Unknown form>'
 
 
 class ParseError(FormError):

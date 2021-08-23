@@ -4,10 +4,28 @@ import pytest
 
 from gforms import Form
 from gforms.elements_base import Grid
-from gforms.elements import DateTime, Duration, Date, Time
+from gforms.elements import DateTime, Duration, Date, Time, Short
 from gforms.errors import FormNotLoaded, FormNotValidated
 
 from .conftest import FormDumpTest
+
+
+class TestFormMethods(FormDumpTest):
+    form_type = 'prefilled'
+
+    # reload() test is useless
+    def test_reset(self, form):
+        text_input = form.pages[0].elements[0]
+        old_value = 'text_value'
+        text_input.set_value('new_value')
+        form.reset()
+        # reuse code from element tests?
+        assert list(text_input.payload().values())[0][0] == old_value
+
+    def test_clear(self, form):
+        text_input = form.pages[0].elements[0]
+        form.clear()
+        assert text_input.payload() == {}
 
 
 # NOTE will most probably fail if elements aren't parsed correctly
