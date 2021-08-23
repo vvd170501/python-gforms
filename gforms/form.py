@@ -322,8 +322,6 @@ class Form:
         )
         return f'{title}\n{lines}'
 
-    # TODO add reset() method (clear all inputs or set to prefilled values)
-
     def fill(
             self,
             callback: Optional[CallbackType] = None,
@@ -363,6 +361,46 @@ class Form:
             ValueError: The callback returned an invalid value.
         """
         self._iterate_elements(callback, fill_optional, do_fill=True)
+
+    def reload(self):
+        """Reloads the form.
+
+        Raises:
+            FormNotLoaded
+        """
+        if not self.is_loaded:
+            raise FormNotLoaded(self)
+        self.load(self.url)
+
+    def reset(self):
+        """Resets user input and restores prefilled values.
+
+        If the form was loaded from an edit link,
+        original values are also restored.
+
+        If the form itself was not edited,
+        a call to reset() is equivalent to a reload(),
+        but without any actual requests.
+
+        Raises:
+            FormNotLoaded
+        """
+        if not self.is_loaded:
+            raise FormNotLoaded(self)
+        for element in self._input_elements():
+            element.prefill(self._prefilled_data)
+    # !! add tests
+
+    def clear(self):
+        """Clears all element values.
+
+        Raises:
+            FormNotLoaded
+        """
+        if not self.is_loaded:
+            raise FormNotLoaded(self)
+        for element in self._input_elements():
+            element.set_value(Value.EMPTY)
 
     def validate(self):
         """Checks if the form can be submitted successfully.
@@ -602,6 +640,12 @@ class Form:
         for (page, next_page) in zip(self.pages, self.pages[1:] + [None]):
             page._resolve_actions(next_page, mapping)
 
+    def _input_elements(self):
+        for page in self.pages:
+            for element in page.elements:
+                if isinstance(element, InputElement):
+                    yield element
+
     def _iterate_elements(
             self,
             callback: Optional[CallbackType] = None,
@@ -609,7 +653,10 @@ class Form:
             *,
             do_fill
     ):
-        """(optionally) fills and validates the elements."""
+        """(optionally) fills and validates the elements.
+
+        Finds pages for submission, skips pages if needed.
+        """
         if not self.is_loaded:
             raise FormNotLoaded(self)
 
