@@ -77,7 +77,7 @@ class ActionOption(Option):
         return f'{s} -> Go to Page {self.next_page.index + 1}'
 
     def _resolve_action(self, next_page, mapping):
-        from .elements import _Action
+        from .elements_base import _Action
         if next_page is None:
             return
         if self._action == _Action.NEXT:
@@ -88,6 +88,6 @@ class ActionOption(Option):
 
 def parse(option):
     """Creates an Option of the right type from its JSON representation."""
-    if len(option) > Option._Index.ACTION and option[Option._Index.ACTION] is not None:
+    if list_get(option, Option._Index.ACTION) is not None:
         return ActionOption.parse(option)
     return Option.parse(option)
