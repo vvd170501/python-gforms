@@ -13,7 +13,7 @@ from .elements import _Action, Element, Page, UserEmail, Value, parse as parse_e
 from .elements import CallbackRetVal, default_callback
 from .errors import ClosedForm, InfiniteLoop, ParseError, FormNotLoaded, FormNotValidated, \
     InvalidURL, NoSuchForm, EditingDisabled, SigninRequired
-from .util import add_indent, page_separator, list_get
+from .util import add_indent, deprecated, list_get, page_separator
 
 
 # Originally based on https://gist.github.com/gcampfield/cb56f05e71c60977ed9917de677f919c
@@ -31,8 +31,9 @@ class Settings:
             If this value is SendReceipt.ALWAYS or the user opts in
             to receive the receipt, a captcha will be required
             to submit the form.
-        signin_required: When Ture, the user must use a google account
-            to submit this form. Only one response can be submitted.
+        submit_once: Limit to 1 response. Implies sign-in requirement.
+        signin_required: Deprecated, use Form.requires_signin instead.
+            When True, the user must use a google account to submit this form.
         show_summary: Whether the user is allowed to view response stats.
         edit_responses: Self-explanatory.
         show_progressbar: Self-explanatory.
@@ -42,6 +43,7 @@ class Settings:
         show_resubmit_link: Self-explanatory.
         confirmation_msg:
             The message which is shown after a successful submission.
+        disable_autosave: Disable autosave for logged-in users.
         is_quiz: Self-explanatory.
         immediate_grades: The user may view their grades (score) immediately.
         show_missed: "Identify which questions were answered incorrectly"
@@ -52,6 +54,7 @@ class Settings:
 
     class _Index:
         FIRST_BLOCK = 2
+        # index = 5: [0, 0] | None, unused?
         SECOND_BLOCK = 10
         QUIZ_BLOCK = 16
 
@@ -62,10 +65,12 @@ class Settings:
         EDIT_RESPONSES = 3
         # Second block. The first 4 elements may be None
         SHOW_PROGRESSBAR = 0
-        SIGNIN_REQUIRED = 1
+        # Signin requirement is not present in form data? Both values (this and MAYBE_SUBMIT_ONCE) are false for a form with a file upload element.
+        SUBMIT_ONCE = 1  # None(default/not set?) == False?
         SHUFFLE_QUESTIONS = 2
         RECEIPT = 3
         COLLECT_EMAILS = 4
+        DISABLE_AUTOSAVE = 5  # may be missing
         # Quiz block
         # It's possible to create a form with IMMEDIATE_GRADES ==  COLLECT_EMAILS == 0
         GRADES_SETTINGS = 0
@@ -94,10 +99,11 @@ class Settings:
             self.edit_responses = bool(first_block[self._Index.EDIT_RESPONSES])
         if second_block is not None:
             self.show_progressbar = bool(second_block[self._Index.SHOW_PROGRESSBAR])
-            self.signin_required = bool(second_block[self._Index.SIGNIN_REQUIRED])
+            self.submit_once = bool(second_block[self._Index.SUBMIT_ONCE])
             self.shuffle_questions = bool(second_block[self._Index.SHUFFLE_QUESTIONS])
             self.send_receipt = self.SendReceipt(second_block[self._Index.RECEIPT])
             self.collect_emails = bool(second_block[self._Index.COLLECT_EMAILS])
+            self.disable_autosave = bool(list_get(second_block, self._Index.DISABLE_AUTOSAVE, False))
         self.is_quiz = bool(list_get(quiz, self._Index.IS_QUIZ, False))
         if self.is_quiz:
             self.immediate_grades = bool(quiz[self._Index.IMMEDIATE_GRADES])
@@ -110,24 +116,35 @@ class Settings:
         """Initializes all settings with a default value."""
         self.collect_emails = False
         self.send_receipt = self.SendReceipt.UNUSED
-
-        self.signin_required = False
-
+        self.submit_once = False
         self.show_summary = False
         self.edit_responses = False
 
         self.show_progressbar = False
         self.shuffle_questions = False
         self.show_resubmit_link = True
-
         self.confirmation_msg: Optional[str] = None
+        self.disable_autosave = False
 
         self.is_quiz = False
         self.immediate_grades = True
-
         self.show_missed = True
         self.show_correct_answers = True
         self.show_points = True
+
+    @property
+    @deprecated
+    def signin_required(self):
+        return self.submit_once
+
+    @property
+    def show_resubmit_link(self):
+        # if submit_once is set, show_resubmit_link may still be true (but meaningless)
+        return self._show_resubmit_link and not self.submit_once
+
+    @show_resubmit_link.setter
+    def show_resubmit_link(self, value):
+        self._show_resubmit_link = value
 
 
 class SubmissionResult:
@@ -170,6 +187,7 @@ class Form:
         description: Description of the form.
         pages: List of form pages.
         settings: The form settings.
+        requires_signin: The user must use a google account to submit this form.
         is_loaded: Indicates if this form was properly loaded and parsed.
         is_validated:
             Indicates if this form was successfully validated and may be submitted.
@@ -178,8 +196,8 @@ class Form:
     class _DocIndex:
         FORM = 1
         NAME = 3
-        URL = 14  # Unused. Is the index constant?
-        SIGNIN_REQUIRED = 18  # Duplicate or has other meaning?
+        URL = 14  # Unused.
+        MAYBE_SUBMIT_ONCE = 18  # Duplicate / other meaning? Currently unused
 
     class _FormIndex:
         DESCRIPTION = 0
@@ -203,6 +221,13 @@ class Form:
     _fbzx: Optional[str]  # Doesn't need to be unique
     _history: Optional[str]
     _draft: Optional[str]
+
+    @property
+    def requires_signin(self):
+        # NOTE also should be true for forms with file upload,
+        # but now (06 Sep 2021) such forms can't be loaded (HTTP Unauthorized on the first page)
+        # Signin requirement may depend on other form elements (if they are added in future).
+        return self.settings.submit_once
 
     @property
     def is_validated(self):
@@ -398,7 +423,7 @@ class Form:
         if need_receipt and captcha_handler is None:
             raise ValueError('captcha_handler is missing')
 
-        if self.settings.signin_required:
+        if self.requires_signin:
             raise SigninRequired(self)
 
         if session is None:
@@ -508,7 +533,7 @@ class Form:
             self.title = self.name
         self.description = form[self._FormIndex.DESCRIPTION]
 
-        self.settings.parse(form)
+        self.settings.parse(form)  # NOTE may need data[18] in future
 
         self.pages = [Page.first()]
         if self.settings.collect_emails:

@@ -57,13 +57,14 @@ class FormUrl(metaclass=UrlMeta):
     settings_email: str
     settings_email_opt_in: str
     settings_email_always: str
-    settings_signin: str
+    settings_submit_once: str
     settings_edit: str
     settings_stats: str
     settings_pbar: str
     settings_shuffle: str
-    settings_no_resub: str
+    settings_no_resubmit_link: str
     settings_confirmation_msg: str
+    settings_disable_autosave: str
     settings_quiz: str
     settings_quiz_alt: str
 

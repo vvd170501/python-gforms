@@ -1,6 +1,8 @@
 import random
 import re
+import warnings
 from enum import Enum
+from functools import wraps
 from typing import Optional
 
 SEP_WIDTH = 60  # implement dynamic width?
@@ -36,6 +38,21 @@ class ArgEnum(Enum):
         obj._value_ = value
         obj.arg = arg
         return obj
+
+
+def deprecated(func):  # from SO
+    """This is a decorator which can be used to mark functions
+    as deprecated. It will result in a warning being emitted
+    when the function is used."""
+    @wraps(func)
+    def new_func(*args, **kwargs):
+        warnings.simplefilter('always', DeprecationWarning)  # turn off filter
+        warnings.warn("Call to deprecated function {}.".format(func.__name__),
+                      category=DeprecationWarning,
+                      stacklevel=2)
+        warnings.simplefilter('default', DeprecationWarning)  # reset filter
+        return func(*args, **kwargs)
+    return new_func
 
 
 def list_get(lst, index, default=None):
