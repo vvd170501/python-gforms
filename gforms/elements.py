@@ -117,13 +117,13 @@ class Page(Element):
         title = f'Page {self.index + 1}:'
         if self.name:
             title = f'{title} {self.name}'
-        if self.description:
-            title = f'{title}\n{self.description}'
         if not self._has_default_next_page:
             if self._next_page is None:
                 title = f'{title} -> Submit'
             else:
                 title = f'{title} -> Page {self._next_page.index + 1}'
+        if self.description:
+            title = f'{title}\n{self.description}'
         if not self.elements:
             return title
         separator = elem_separator(indent)
