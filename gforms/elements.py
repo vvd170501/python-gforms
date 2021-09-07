@@ -571,6 +571,9 @@ class DateTime(DateInput):
 class FileUpload(SingleInput):
     # As of June 2021, forms with a file upload require sign in for loading,
     # so this class is actually never used
+
+    # TODO parse more info?
+
     def set_value(self, value):
         raise NotImplementedError()
 

@@ -50,11 +50,16 @@ class TestEmailAlways(SettingsTest):
         settings.send_receipt = Settings.SendReceipt.ALWAYS
 
 
-class TestSignin(SettingsTest):
-    form_type = 'settings_signin'
+class TestSubmitOnce(SettingsTest):
+    form_type = 'settings_submit_once'
 
     def modify_settings(self, settings):
-        settings.signin_required = True
+        settings.submit_once = True
+
+    def test(self, form):
+        super().test(form)
+        assert form.requires_signin
+        assert not form.settings.show_resubmit_link
 
 
 class TestEdit(SettingsTest):
@@ -86,7 +91,7 @@ class TestShuffle(SettingsTest):
 
 
 class TestNoResub(SettingsTest):
-    form_type = 'settings_no_resub'
+    form_type = 'settings_no_resubmit_link'
 
     def modify_settings(self, settings):
         settings.show_resubmit_link = False
@@ -97,6 +102,13 @@ class TestConfirmationMsg(SettingsTest):
 
     def modify_settings(self, settings):
         settings.confirmation_msg = 'custom_text'
+
+
+class TestDisableAutosave(SettingsTest):
+    form_type = 'settings_disable_autosave'
+
+    def modify_settings(self, settings):
+        settings.disable_autosave = True
 
 
 class TestQuiz(SettingsTest):
