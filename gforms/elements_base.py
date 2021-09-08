@@ -51,6 +51,33 @@ class _Action:
     SUBMIT = -3
 
 
+class ImageAttachmemt:
+    """An imagw attached to an input element.
+
+    Attributes:
+        caption: Optional image caption.
+    """
+    class _Index:
+        # IMAGE_OBJECT is not parsed (see gforms.elements.Image for more info and format)
+        IMAGE_OBJECT = 0
+        IMAGE_CAPTION = 1
+
+    @classmethod
+    def parse(cls, image_data):
+        caption = list_get(image_data, cls._Index.IMAGE_CAPTION)
+        return cls(caption)
+
+    def __init__(self, caption):
+        self.caption = caption
+
+    def to_str(self, indent=0):
+        if self.caption:
+            descr = f'Image: {self.caption}'
+        else:
+            descr = 'Untitled image'
+        return ' ' * indent + f'<{descr}>'
+
+
 class Element:
     """An element of a form.
 
@@ -133,27 +160,32 @@ class InputElement(Element, ABC):
 
     Attributes:
         required: Self-explanatory.
+        image: An optional image attachment.
     """
 
     class _Index(Element._Index):
         ENTRIES = 4
         ENTRY_ID = 0
         REQUIRED = 2
+        IMAGE_ATTACHMENT = 9
 
     @classmethod
     def _parse(cls, elem):
         res = super()._parse(elem)
         entries = cls._get_entries(elem)
+        image = list_get(elem, cls._Index.IMAGE_ATTACHMENT)
         res.update({
             'entry_ids': [e[cls._Index.ENTRY_ID] for e in entries],
             'required': bool(entries[0][cls._Index.REQUIRED]),  # same for all entries
+            'image': ImageAttachmemt.parse(image) if image else None,
         })
         return res
 
-    def __init__(self, *, entry_ids, required, **kwargs):
+    def __init__(self, *, entry_ids, required, image=None, **kwargs):
         super().__init__(**kwargs)
         self._entry_ids = entry_ids
         self.required = required
+        self.image = image
         self._values: List[List[str]] = [[] for _ in self._entry_ids]
 
     @abstractmethod
@@ -190,7 +222,7 @@ class InputElement(Element, ABC):
 
     def to_str(self, indent=0, include_answer=False):
         """See base class."""
-        parts = self._header()
+        parts = self._header(indent)
         hints = self._hints(indent, include_answer)
         if hints:
             parts.append('\n')
@@ -257,7 +289,7 @@ class InputElement(Element, ABC):
         if self._form is not None:
             self._form._unvalidated_elements.add(self)
 
-    def _header(self) -> List[str]:
+    def _header(self, indent=0) -> List[str]:
         parts = [self._type_str()]
         if self.required:
             parts.append('*')
@@ -265,6 +297,8 @@ class InputElement(Element, ABC):
             parts.append(f': {self.name}')
         if self.description:
             parts.append(f'\n{self.description}')
+        if self.image:
+            parts.append(f'\n{self.image.to_str(indent)}')
         return parts
 
     def _hints(self, indent=0, modify=False):
@@ -878,6 +912,7 @@ class TextInput(ValidatedInput, SingleInput):
     def _is_misconfigured(self):
         return self.validator.subtype is NumberTypes.RANGE \
             and self.validator.args[0] > self.validator.args[1]
+    # TODO to_str(..., True) -> show blank line instead of an answer? same for date and time
 
 
 class ActionChoiceInput(ChoiceInput1D):
