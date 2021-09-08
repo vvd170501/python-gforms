@@ -281,6 +281,20 @@ class TestFileUpload(ElementTest):
     expected = [[], [FileUpload]]
 
 
+class TestImageAttachments(ElementTest):
+    form_type = 'image_attachments'
+    expected = [[Short] * 3]
+
+    def test_images(self, first_page):
+        assert first_page[0].image is None
+        image = first_page[1].image
+        image_with_caption = first_page[2].image
+        assert image is not None
+        assert not image.caption
+        assert image_with_caption is not None
+        assert image_with_caption.caption == 'The_caption'
+
+
 class TestTextValidators(ElementTest):
     form_type = 'text_validation'
 

@@ -183,9 +183,10 @@ class Comment(Element):
 
 
 class Image(MediaElement):
-    # elem[6][0] - cosmoId (no direct link?)
+    # elem[6] = [cosmoId, ?, [w, h, alignment]] (no direct link from cosmoId?)
     # search "google docs cosmoid" for more details
-    # NOTE some input elements or options may contain attached images (parsing is not implemented)
+    # NOTE input elements may also have image attachments (see ImageAttachment).
+    # Format of IMAGE_OBJECT in ImageAttachment is the same as elem[6]
     pass
 
 
