@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import random
 from datetime import date, datetime, time, timedelta
-from typing import List, Union, Optional, Dict, Tuple
+from typing import List, Union, Optional, Dict, Tuple, Set, cast, Callable
 from warnings import warn
 
 from .elements_base import _Action, Value, MultiChoiceInput
@@ -62,6 +62,8 @@ class Page(Element):
     Attributes:
         index: Index of the page.
         elements: A list of elements contained within the page.
+        is_validated: Indicates if all elements in this page are validated.
+            If True, the page can be submitted.
     """
 
     class _Index(Element._Index):
@@ -93,13 +95,43 @@ class Page(Element):
         self._has_default_next_page = True
         self.index = None
         self.elements = []
+        self._unvalidated_elements: Set[InputElement] = set()
+        self._validation_state_hook: Optional[Callable[[Page], None]] = None
+        self._path_invalidation_hook: Optional[Callable[[Page], None]] = None
+
+    @property
+    def is_validated(self):
+        return len(self._unvalidated_elements) == 0
 
     def with_index(self, index):
         self.index = index
         return self
 
-    def append(self, elem):
+    def set_hooks(
+            self,
+            validation_state_hook: Optional[Callable[[Page], None]],
+            path_invalidation_hook: Optional[Callable[[Page], None]]
+    ):
+        """Sets a validation_state_hook which will be called on page (in)validation.
+
+        Args:
+            validation_state_hook: Same as in InputElement.set_hook.
+            path_invalidation_hook:
+                Is used when self.next_page() may have been changed.
+        """
+        self._validation_state_hook = validation_state_hook
+        self._path_invalidation_hook = path_invalidation_hook
+
+    def append(self, elem: Element):
         self.elements.append(elem)
+        if isinstance(elem, InputElement):
+            elem.set_hook(self._update_validation_state)
+            if not elem.is_validated:
+                self._update_validation_state(elem)
+
+    def validate(self):
+        for element in self._unvalidated_elements.copy():  # !! add tests
+            element.validate()
 
     def next_page(self):
         """The next pge, based on user's choices."""
@@ -168,6 +200,24 @@ class Page(Element):
         else:
             self._next_page = mapping[next_page._prev_action]
             self._has_default_next_page = False
+
+    def _update_validation_state(self, elem: InputElement):
+        old_validation_state = self.is_validated
+        if elem.is_validated:
+            self._unvalidated_elements.discard(elem)
+        else:
+            self._unvalidated_elements.add(elem)
+            if (
+                    isinstance(elem, ActionChoiceInput) and
+                    self._path_invalidation_hook is not None and
+                    isinstance(elem.options[0], ActionOption) and
+                    cast(ActionOption, elem.options[0]).next_page is not None
+            ):
+                # NOTE next page may or may not change, add a check?
+                self._path_invalidation_hook(self)
+            # Do nothing if the element's options have no actions or the actions are ignored
+        if self.is_validated != old_validation_state and self._validation_state_hook:
+            self._validation_state_hook(self)
 
 
 Page.SUBMIT = Page(id_=_Action.SUBMIT, name=None, description=None,
@@ -697,6 +747,7 @@ def default_callback(elem: InputElement, page_index, elem_index) -> Union[ElemVa
 
 _element_mapping = {getattr(Element.Type, el_type.__name__.upper()): el_type for el_type in [
     Unknown,
+    Page,
     Short, Paragraph,
     Radio, Dropdown, Checkboxes, Scale,
     Comment, Page, Image, Video,
