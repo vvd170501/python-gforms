@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 from enum import Enum, auto
-from typing import Dict, List, Literal, Union, cast, Any, Optional, Tuple, TYPE_CHECKING
+from typing import Dict, List, Literal, Union, cast, Any, Optional, Tuple, TYPE_CHECKING, Callable
 
 from .util import DefaultEnum, list_get
 from .validators import Validator, GridValidator, TextValidator, GridTypes, NumberTypes
@@ -11,9 +11,6 @@ from .errors import DuplicateOther, EmptyOther, InvalidChoice, \
     ElementTypeError, ElementValueError, RequiredElement, RequiredRow, RowTypeError, \
     InvalidRowChoice, MisconfiguredElement
 from .options import ActionOption, Option, parse as parse_option
-
-if TYPE_CHECKING:
-    from .form import Form
 
 
 class Value(Enum):
@@ -134,10 +131,6 @@ class Element:
         self.name = name
         self.description = description
         self.type = type_
-        self._form: Optional['Form'] = None
-
-    def bind(self, form):
-        self._form = form
 
     def to_str(self, indent=0, **kwargs):
         """Returns a text representation of the element.
@@ -161,6 +154,7 @@ class InputElement(Element, ABC):
     Attributes:
         required: Self-explanatory.
         image: An optional image attachment.
+        is_validated: The element has a valid value.
     """
 
     class _Index(Element._Index):
@@ -187,6 +181,8 @@ class InputElement(Element, ABC):
         self.required = required
         self.image = image
         self._values: List[List[str]] = [[] for _ in self._entry_ids]
+        self._validation_state_hook: Optional[Callable[[InputElement], None]] = None
+        self._is_validated = False
 
     @abstractmethod
     def set_value(self, value):
@@ -204,6 +200,28 @@ class InputElement(Element, ABC):
         """
         raise NotImplementedError()
 
+    # TODO!! check/update tests
+    def set_hook(self, validation_state_hook: Optional[Callable[[InputElement], None]]):
+        """Sets a hook which will be called on element (in)validation.
+
+        Args:
+            validation_state_hook:
+                Will be called on each change of validation state.
+                This element will be passed as an argument.
+        """
+        self._validation_state_hook = validation_state_hook
+
+    @property
+    def is_validated(self) -> bool:
+        return self._is_validated
+
+    @is_validated.setter
+    def is_validated(self, value: bool):
+        old_value = self._is_validated
+        self._is_validated = value
+        if old_value != value and self._validation_state_hook:
+            self._validation_state_hook(self)
+
     def validate(self):
         """Checks if the element has a valid value.
 
@@ -217,8 +235,7 @@ class InputElement(Element, ABC):
                 but is not valid for this element.
         """
         self._validate()
-        if self._form is not None:
-            self._form._unvalidated_elements.discard(self)
+        self.is_validated = True
 
     def to_str(self, indent=0, include_answer=False):
         """See base class."""
@@ -262,11 +279,9 @@ class InputElement(Element, ABC):
     def prefill(self, prefilled_data: Dict[str, List[str]]):
         """Fills the element with values from the prefilled link."""
         values = [prefilled_data.get(entry_id, []) for entry_id in self._entry_ids]
-        # FIXME prefilled element on an skipped page doesn't need to be validated
         # prefilled data still needs to be validated
         # (e.g. a modified url was used or elements were updated)
-        if any(values):  # Don't invalidate an element if it's not prefilled. Find a better solution?
-            self._set_values(values)
+        self._set_values(values)
 
     @staticmethod
     def _submit_id(entry_id):
@@ -286,8 +301,7 @@ class InputElement(Element, ABC):
                 values[i] = []
 
         self._values = values  # type: ignore
-        if self._form is not None:
-            self._form._unvalidated_elements.add(self)
+        self.is_validated = False
 
     def _header(self, indent=0) -> List[str]:
         parts = [self._type_str()]
@@ -943,11 +957,6 @@ class ActionChoiceInput(ChoiceInput1D):
     def _set_choices(self, choices: List[Union[List[ChoiceValue], EmptyValue]]):
         self.next_page = None
         super()._set_choices(choices)
-        # Don't reset no_loops if the element's options have no actions or the actions are ignored
-        if (self._form is not None and
-                isinstance(self.options[0], ActionOption) and
-                cast(ActionOption, self.options[0]).next_page is not None):
-            self._form._no_loops = False
 
     def _add_choice(self, choices, choice: Option):
         super()._add_choice(choices, choice)

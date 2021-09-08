@@ -19,6 +19,7 @@ from .util import add_indent, deprecated, list_get, page_separator
 # Originally based on https://gist.github.com/gcampfield/cb56f05e71c60977ed9917de677f919c
 
 
+# TODO use TypeVar instead of Union?
 CallbackType = Callable[[InputElement, int, int], CallbackRetVal]
 
 
@@ -209,12 +210,15 @@ class Form:
     name: Optional[str]
     title: Optional[str]
     description: Optional[str]
-    pages: Optional[List[Page]]
+    pages: List[Page]
     settings: Settings
 
     is_loaded: bool
-    _unvalidated_elements: Set[Element]
-    _no_loops: bool  # If true, the form is guaranteed to contain no loops.
+
+    _selected_pages: Set[Page]  # Pages which will be submitted.
+    _unvalidated_pages: Set[Page]  # A subset of _selected_pages.
+    # Full path == page sequence without repeating pages and with a final page.
+    _found_full_path: bool
 
     _prefilled_data: Dict[str, List[str]]
     _first_page: Optional[requests.models.Response]
@@ -235,7 +239,7 @@ class Form:
 
         If self.fill was called and did not raise an exception,
         this value will be True."""
-        return len(self._unvalidated_elements) == 0 and self._no_loops
+        return len(self._unvalidated_pages) == 0 and self._found_full_path
 
     def __init__(self):
         self._clear()
@@ -348,15 +352,15 @@ class Form:
                 by the default callback.
 
         Raises:
-            ValueError: The callback returned an invalid value.
-            gforms.errors.ElementError:
-                The callback returned an unexpected value for an element
+            gforms.errors.FormNotLoaded: The form was not loaded.
             gforms.errors.ValidationError: The form cannot be submitted later
                 if an element is filled with the callback return value
-            gforms.errors.FormNotLoaded: The form was not loaded.
+            gforms.errors.ElementError:
+                The callback returned an unexpected value for an element
             gforms.errors.InfiniteLoop: The chosen values cannot be submitted,
                 because the page transitions form an infinite loop.
             NotImplementedError: The default callback was used for an unsupported element.
+            ValueError: The callback returned an invalid value.
         """
         self._iterate_elements(callback, fill_optional, do_fill=True)
 
@@ -463,15 +467,16 @@ class Form:
         self.name = None
         self.title = None
         self.description = None
-        self.pages = None
+        self.pages = []
         self.settings = Settings()
         self.is_loaded = False
 
         self._prefilled_data = {}
         self._first_page = None
 
-        self._unvalidated_elements = set()
-        self._no_loops = True  # The form is guaranteed to contain no loops.
+        self._selected_pages = set()
+        self._unvalidated_pages = set()
+        self._found_full_path = False
 
         self._fbzx = None  # Doesn't need to be unique
         self._history = None
@@ -535,11 +540,15 @@ class Form:
 
         self.settings.parse(form)  # NOTE may need data[18] in future
 
-        self.pages = [Page.first()]
+        self._add_page(Page.first())
+        self._selected_pages = {self.pages[0]}  # The first page will be submitted for any path.
+        # A single-page form (even with action elements)
+        # doesn't require a path check (actions are ignored).
+        self._found_full_path = True
+
         if self.settings.collect_emails:
             # Not a real element, but is displayed like one
             self._email_input = UserEmail()
-            self._email_input.bind(self)
             self.pages[0].append(self._email_input)
             self._email_input.prefill(self._prefilled_data)
 
@@ -547,20 +556,51 @@ class Form:
             return
 
         for elem in form[self._FormIndex.ELEMENTS]:
-            el_type = Element.Type(elem[Element._Index.TYPE])
-            if el_type == Element.Type.PAGE:
-                self.pages.append(Page.parse(elem).with_index(len(self.pages)))
-                # A multipage form with no input elements still needs to be validated.
-                # A single-page form with action elements doesn't need additional validation
-                # (actions are ignored).
-                self._no_loops = False
-                continue
             element = parse_element(elem)
-            element.bind(self)
+            if isinstance(element, Page):
+                self._add_page(element.with_index(len(self.pages)))
+                # A multipage form with no input elements still needs to be validated
+                # (Page transitions can form a loop).
+                self._found_full_path = False
+                continue
             self.pages[-1].append(element)
             if isinstance(element, InputElement):
                 element.prefill(self._prefilled_data)
         self._resolve_actions()
+
+    def _add_page(self, page: Page):
+        self.pages.append(page)
+        page.set_hooks(self._update_validation_state, self._invalidate_path)
+
+    def _select_page(self, page: Page):
+        if page in self._selected_pages:
+            # It is possible to create a form in which any choice will lead to an infinite loop.
+            # These cases are not detected (add a separate public method?)
+            raise InfiniteLoop(self)
+        self._selected_pages.add(page)
+        if not page.is_validated:
+            self._unvalidated_pages.add(page)
+
+    def _update_validation_state(self, page: Page):
+        if page not in self._selected_pages:
+            return
+        if page.is_validated:
+            self._unvalidated_pages.discard(page)
+        else:
+            self._unvalidated_pages.add(page)
+
+    def _invalidate_path(self, page: Optional[Page] = None):
+        # TODO check if page.next_page() has actually been changed (?)
+        #      Also, it should be possible to invalidate only part of the path
+        self._selected_pages.clear()
+        self._unvalidated_pages.clear()
+        self._found_full_path = False
+
+    def _resolve_actions(self):
+        mapping = {page.id: page for page in self.pages}
+        mapping[_Action.SUBMIT] = Page.SUBMIT
+        for (page, next_page) in zip(self.pages, self.pages[1:] + [None]):
+            page._resolve_actions(next_page, mapping)
 
     def _iterate_elements(
             self,
@@ -573,9 +613,10 @@ class Form:
         if not self.is_loaded:
             raise FormNotLoaded(self)
 
+        self._invalidate_path()
         page = self.pages[0]
-        pages_to_submit = {page}
         while page is not None:
+            self._select_page(page)
             # use real element index or it would be better to count only input elements?
             for elem_index, elem in enumerate(page.elements):
                 if not isinstance(elem, InputElement):
@@ -595,22 +636,11 @@ class Form:
                     if value is not Value.UNCHANGED:
                         elem.set_value(value)
 
-                if elem in self._unvalidated_elements:
+                if not elem.is_validated:
                     elem.validate()
 
             page = page.next_page()
-            if page in pages_to_submit:
-                # It is possible to create a form in which any choice will lead to an infinite loop.
-                # These cases are not detected (add a separate public method?)
-                raise InfiniteLoop(self)
-            pages_to_submit.add(page)
-        self._no_loops = True
-
-    def _resolve_actions(self):
-        mapping = {page.id: page for page in self.pages}
-        mapping[_Action.SUBMIT] = Page.SUBMIT
-        for (page, next_page) in zip(self.pages, self.pages[1:] + [None]):
-            page._resolve_actions(next_page, mapping)
+        self._found_full_path = True
 
     def _emulate_history(self, session, update_last_response):
         history = self._history.split(',')  # ['0']

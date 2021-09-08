@@ -4,7 +4,7 @@ import pytest
 
 from gforms.errors import ClosedForm, InvalidURL, NoSuchForm, EditingDisabled, SigninRequired
 
-from .conftest import FormTest, require_urls
+from .conftest import RealFormTest, require_urls
 
 
 class TestLoadErrors:
@@ -38,7 +38,7 @@ class TestLoadErrors:
 
 
 # check that real urls are accepted
-class TestLoadOk(FormTest):
+class TestLoadOk(RealFormTest):
     form_type = 'empty'
 
     def test_load(self, form):
@@ -46,7 +46,7 @@ class TestLoadOk(FormTest):
 
 
 # check that short (real) urls are accepted
-class TestShortLoadOk(FormTest):
+class TestShortLoadOk(RealFormTest):
     form_type = 'empty_short'
 
     def test_load(self, form):

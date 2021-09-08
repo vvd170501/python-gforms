@@ -2,25 +2,26 @@ from abc import ABC, abstractmethod
 
 import pytest
 
-from .conftest import FormTest
+from .conftest import RealFormTest
 
 
 # NOTE actual submission results aren't checked
-class TestSubmitEmpty(FormTest):
+class TestSubmitEmpty(RealFormTest):
     form_type = 'empty'
 
     def test_submit(self, form, session):
+        # An empty single-page form doesn't need to be validated
         form.submit(session)
 
 
-class TestSubmitShortLink(FormTest):
+class TestSubmitShortLink(RealFormTest):
     form_type = 'empty_short'  # A short link for the same empty form
 
     def test_submit(self, form, session):
         form.submit(session)
 
 
-class WithEmulation(FormTest, ABC):
+class WithEmulation(RealFormTest, ABC):
     @staticmethod
     @abstractmethod
     def _callback(elem, i, j):

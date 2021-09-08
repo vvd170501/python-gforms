@@ -7,12 +7,12 @@ from gforms.elements_base import Grid
 from gforms.elements import DateTime, Duration, Date, Time
 from gforms.errors import FormNotLoaded, FormNotValidated
 
-from .conftest import FormParseTest
+from .conftest import FormDumpTest
 
 
 # NOTE will most probably fail if elements aren't parsed correctly
 # Xfail this class if any test_elements() in 10_load_test fails?
-class TestFill(FormParseTest):
+class TestFill(FormDumpTest):
     """
     A form with all types of input elements.
     Ones that can be filled by default_callback (choice types) are marked as required.
@@ -69,7 +69,7 @@ class TestFillNotLoaded:
             form.fill()
 
 
-class TestSubmitErrors(FormParseTest):
+class TestSubmitErrors(FormDumpTest):
     form_type = 'fill'
 
     def test_submit_not_loaded(self):
@@ -78,11 +78,28 @@ class TestSubmitErrors(FormParseTest):
             form.submit()
 
     def test_submit_not_validated(self, form):
+        # may contain loops or contains unvalidated elements
         with pytest.raises(FormNotValidated):
             form.submit()
 
 
-class TestFormValidation(FormParseTest):
+class Test1PageValidation(FormDumpTest):
+    form_type = 'required'
+
+    def test_not_validated(self, form):  # failed in 1.1.2
+        # contains unvalidated elements (loop check is not required)
+        with pytest.raises(FormNotValidated):
+            form.submit()
+
+
+class TestMultipageValidation(FormDumpTest):
+    form_type = '...'
+    # !! add tests
+    # If a page will not be submitted and contains unvalidated elements,
+    # it should be possible to submit the form
+
+
+class TestInvalidation(FormDumpTest):
     """
     The form has two pages.
     The first page contains a short text input and a radio input
@@ -105,6 +122,7 @@ class TestFormValidation(FormParseTest):
         form.validate()
         assert form.is_validated
         radio = form.pages[0].elements[1]
+        # !! ignored actions should not invalidate the form
         radio.set_value('Next')
         assert not form.is_validated
         # If an element has actions and they are not ignored,
