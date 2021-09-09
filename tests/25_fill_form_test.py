@@ -87,16 +87,9 @@ class Test1PageValidation(FormDumpTest):
     form_type = 'required'
 
     def test_not_validated(self, form):  # failed in 1.1.2
-        # contains unvalidated elements (loop check is not required)
+        # contains unvalidated elements, path/loop check is not required
         with pytest.raises(FormNotValidated):
             form.submit()
-
-
-class TestMultipageValidation(FormDumpTest):
-    form_type = '...'
-    # !! add tests
-    # If a page will not be submitted and contains unvalidated elements,
-    # it should be possible to submit the form
 
 
 class TestInvalidation(FormDumpTest):
@@ -104,7 +97,8 @@ class TestInvalidation(FormDumpTest):
     The form has two pages.
     The first page contains a short text input and a radio input
     with options "Loop" (go to page 1) and "Next" (go to next page).
-    Both elements are optional. The second page is empty.
+    Both elements are optional.
+    The second page contains a radio input (a copy of the first one).
     """
 
     form_type = 'form_validation'
@@ -118,16 +112,44 @@ class TestInvalidation(FormDumpTest):
         short.validate()
         assert form.is_validated
 
-    def test_loop_invalidation(self, form):
+    def test_path_invalidation(self, form):
         form.validate()
         assert form.is_validated
         radio = form.pages[0].elements[1]
-        # !! ignored actions should not invalidate the form
         radio.set_value('Next')
-        assert not form.is_validated
+        radio.validate()
         # If an element has actions and they are not ignored,
         # the whole form needs to be validated.
-        radio.validate()
         assert not form.is_validated
         form.validate()
+        assert form.is_validated
+        # Ignored actions should not invalidate an existing path
+        radio2 = form.pages[1].elements[0]
+        radio2.set_value('Loop')
+        radio2.validate()
+        assert form.is_validated
+
+
+class TestMultipageValidation(FormDumpTest):
+    """
+    The form has three pages.
+    The first page contains a required radio input with options
+    "Next" (go to next page) and "Skip" (go page 3).
+    The second (skippable) page contains a required radio input.
+    The third page is empty.
+    """
+
+    form_type = 'multipage_validation'
+
+    def test_skipped_page(self, form):
+        radio = form.pages[0].elements[0]
+        radio.set_value('Skip')
+        radio2 = form.pages[1].elements[0]
+        radio2.set_value('Opt1')
+        form.validate()
+        # Skipped page is not validated, but this should not affect form status
+        assert form.is_validated  # failed in 1.1.2
+        form.pages[1].validate()
+        # Skipped page invalidation should not affect form status
+        radio2.set_value('Opt2')
         assert form.is_validated

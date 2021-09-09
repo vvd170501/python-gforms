@@ -200,7 +200,6 @@ class InputElement(Element, ABC):
         """
         raise NotImplementedError()
 
-    # TODO!! check/update tests
     def set_hook(self, validation_state_hook: Optional[Callable[[InputElement], None]]):
         """Sets a hook which will be called on element (in)validation.
 

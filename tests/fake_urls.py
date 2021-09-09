@@ -72,6 +72,7 @@ class FormUrl(metaclass=UrlMeta):
     edit = f'https://docs.google.com/forms/d/e/{FormId("edit")}/viewform?edit2={ResponseId("response1")}'
 
     form_validation: str
+    multipage_validation: str
     fill: str
 
 
