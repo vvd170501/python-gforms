@@ -56,6 +56,8 @@ ElemValue = Union[
 CallbackRetVal = Union[ElemValue, Value]
 
 
+# TODO use another base class?
+#      Page <- BaseElement -> Element -> ...
 class Page(Element):
     """A Page element.
 
@@ -130,7 +132,7 @@ class Page(Element):
                 self._update_validation_state(elem)
 
     def validate(self):
-        for element in self._unvalidated_elements.copy():  # !! add tests
+        for element in self._unvalidated_elements.copy():
             element.validate()
 
     def next_page(self):
