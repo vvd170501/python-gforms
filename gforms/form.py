@@ -389,7 +389,6 @@ class Form:
             raise FormNotLoaded(self)
         for element in self._input_elements():
             element.prefill(self._prefilled_data)
-    # !! add tests
 
     def clear(self):
         """Clears all element values.
