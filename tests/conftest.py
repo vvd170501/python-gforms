@@ -181,7 +181,7 @@ def generate_html(url):
         draft = getattr(form_dumps.Draft, which_draft)
     return '<input name="fbzx" value="123456">' \
            '<input name="pageHistory" value="0">' \
-           f'<input name="draftResponse" value="{html.escape(draft)}">' \
+           f'<input name="partialResponse" value="{html.escape(draft)}">' \
            f'<script>FB_PUBLIC_LOAD_DATA_ = {json.dumps(form_data)}\n;</script>'
 
 
