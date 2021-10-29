@@ -786,7 +786,7 @@ class Form:
 
     @staticmethod
     def _get_draft(soup):
-        return Form._get_input(soup, 'draftResponse')
+        return Form._get_input(soup, 'partialResponse')
 
     @staticmethod
     def _raw_form(soup):
