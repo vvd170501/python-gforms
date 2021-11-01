@@ -23,6 +23,12 @@ from .util import add_indent, deprecated, list_get, page_separator
 CallbackType = Callable[[InputElement, int, int], CallbackRetVal]
 
 
+class _ElementNames:
+    FBZX = 'fbzx'
+    DRAFT = 'partialResponse'
+    HISTORY = 'pageHistory'
+
+
 class Settings:
     """Settings for a form.
 
@@ -426,8 +432,8 @@ class Form:
         Args:
             session: see Form.load
             need_receipt:
-                Effective only if settings.send_receipt is SendReceipt.OPT_IN
-                If True, will throw NotImplementedError.
+                Effective only if settings.send_receipt is Settings.SendReceipt.OPT_IN
+                If True, `captcha_handler` is required.
             captcha_handler:
                 A function which accepts a Response (a page with reCAPTCHA v2)
                 and returns a string (g-recaptcha-response).
@@ -733,11 +739,11 @@ class Form:
                      continue_, need_receipt, captcha_response=None):
         payload = page.payload()
 
-        payload['fbzx'] = self._fbzx
+        payload[_ElementNames.FBZX] = self._fbzx
         if continue_:
             payload['continue'] = 1
-        payload['pageHistory'] = history
-        payload['draftResponse'] = draft
+        payload[_ElementNames.HISTORY] = history
+        payload[_ElementNames.DRAFT] = draft
         if need_receipt and not continue_:
             payload['g-recaptcha-response'] = captcha_response
 
@@ -778,15 +784,15 @@ class Form:
 
     @staticmethod
     def _get_fbzx(soup):
-        return Form._get_input(soup, 'fbzx')
+        return Form._get_input(soup, _ElementNames.FBZX)
 
     @staticmethod
     def _get_history(soup):
-        return Form._get_input(soup, 'pageHistory')
+        return Form._get_input(soup, _ElementNames.HISTORY)
 
     @staticmethod
     def _get_draft(soup):
-        return Form._get_input(soup, 'partialResponse')
+        return Form._get_input(soup, _ElementNames.DRAFT)
 
     @staticmethod
     def _raw_form(soup):

@@ -9,6 +9,7 @@ import pytest
 import requests
 
 from gforms import Form
+from gforms.form import _ElementNames
 
 from . import fake_urls, form_dumps
 from .util import skip_requests_exceptions
@@ -179,9 +180,9 @@ def generate_html(url):
     if fake_urls.ResponseId.marker in url:
         which_draft = url.split(fake_urls.ResponseId.marker)[1]
         draft = getattr(form_dumps.Draft, which_draft)
-    return '<input name="fbzx" value="123456">' \
-           '<input name="pageHistory" value="0">' \
-           f'<input name="partialResponse" value="{html.escape(draft)}">' \
+    return f'<input name="{_ElementNames.FBZX}" value="123456">' \
+           f'<input name="{_ElementNames.HISTORY}" value="0">' \
+           f'<input name="{_ElementNames.DRAFT}" value="{html.escape(draft)}">' \
            f'<script>FB_PUBLIC_LOAD_DATA_ = {json.dumps(form_data)}\n;</script>'
 
 
