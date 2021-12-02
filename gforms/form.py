@@ -109,7 +109,7 @@ class Settings:
             self.submit_once = bool(second_block[self._Index.SUBMIT_ONCE])
             self.shuffle_questions = bool(second_block[self._Index.SHUFFLE_QUESTIONS])
             self.send_receipt = self.SendReceipt(second_block[self._Index.RECEIPT])
-            self.collect_emails = bool(second_block[self._Index.COLLECT_EMAILS])
+            self.collect_emails = bool(list_get(second_block, self._Index.COLLECT_EMAILS, False))
             self.disable_autosave = bool(list_get(second_block, self._Index.DISABLE_AUTOSAVE, False))
         self.is_quiz = bool(list_get(quiz, self._Index.IS_QUIZ, False))
         if self.is_quiz:
