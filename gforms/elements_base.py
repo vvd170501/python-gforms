@@ -1,9 +1,11 @@
-from __future__ import annotations
-
 from abc import ABC, abstractmethod
 
 from enum import Enum, auto
-from typing import Dict, List, Literal, Union, cast, Any, Optional, Tuple, TYPE_CHECKING, Callable
+from typing import Dict, List, Union, cast, Any, Optional, Tuple, TYPE_CHECKING, Callable
+try:
+    from typing import Literal
+except ImportError:  # py<3.8
+    from typing_extensions import Literal
 
 from .util import DefaultEnum, list_get
 from .validators import Validator, GridValidator, TextValidator, GridTypes, NumberTypes
@@ -200,7 +202,7 @@ class InputElement(Element, ABC):
         """
         raise NotImplementedError()
 
-    def set_hook(self, validation_state_hook: Optional[Callable[[InputElement], None]]):
+    def set_hook(self, validation_state_hook: Optional[Callable[['InputElement'], None]]):
         """Sets a hook which will be called on element (in)validation.
 
         Args:

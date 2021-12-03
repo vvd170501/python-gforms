@@ -8,7 +8,7 @@ from .errors import SameColumn, UnknownValidator, InvalidText, InvalidArguments,
 from .util import EMAIL_REGEX, URL_REGEX, DefaultEnum, ArgEnum, list_get
 
 if TYPE_CHECKING:
-    from elements import Checkboxes
+    from .elements import Checkboxes
 
 
 class Subtype(DefaultEnum, ArgEnum):

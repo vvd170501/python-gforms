@@ -36,6 +36,7 @@ setup(
     install_requires=[
         'beautifulsoup4',
         'requests',
+        "typing-extensions;python_version<'3.8'",
     ],
     extras_require={
         'dev': [

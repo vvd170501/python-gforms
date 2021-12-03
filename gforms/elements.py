@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import random
 from datetime import date, datetime, time, timedelta
 from typing import List, Union, Optional, Dict, Tuple, Set, cast, Callable
@@ -71,7 +69,7 @@ class Page(Element):
     class _Index(Element._Index):
         ACTION = 5
 
-    SUBMIT: Optional[Page] = None
+    SUBMIT: Optional['Page'] = None
 
     @classmethod
     def first(cls):
@@ -111,8 +109,8 @@ class Page(Element):
 
     def set_hooks(
             self,
-            validation_state_hook: Optional[Callable[[Page], None]],
-            path_invalidation_hook: Optional[Callable[[Page], None]]
+            validation_state_hook: Optional[Callable[['Page'], None]],
+            path_invalidation_hook: Optional[Callable[['Page'], None]]
     ):
         """Sets a validation_state_hook which will be called on page (in)validation.
 
@@ -186,7 +184,7 @@ class Page(Element):
                 result += elem.draft()
         return result
 
-    def _resolve_actions(self, next_page: Optional[Page], mapping):
+    def _resolve_actions(self, next_page: Optional['Page'], mapping):
         for elem in self.elements:
             if isinstance(elem, ActionChoiceInput):
                 elem._resolve_actions(next_page, mapping)
