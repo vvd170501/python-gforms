@@ -170,8 +170,15 @@ class SubmissionResult:
         self.edit = None
         self.quiz_score = None
 
-        # Is the div class fixed?
-        container = soup.find('div', class_='freebirdFormviewerViewResponseLinksContainer')
+        link = soup.find('a')
+        if link is None:
+            return
+        domain = urlsplit(link.get('href', '')).netloc
+        if domain != 'docs.google.com':
+            return  # the next link after the relevant links is 'reportabuse' (01 Mar 2022)
+
+        container = link.find_parent('div')
+
         for link in container.find_all('a'):
             href = link.get('href', '')
             if 'viewanalytics' in href:
