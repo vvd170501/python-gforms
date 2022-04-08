@@ -85,7 +85,7 @@ class Page(Element):
     def _parse(cls, elem):
         res = super()._parse(elem)
         # FIRST / NEXT / SUBMIT / page id
-        res['prev_action'] = list_get(elem, cls._Index.ACTION, _Action.NEXT)
+        res['prev_action'] = list_get(elem, cls._Index.ACTION) or _Action.NEXT
         return res
 
     def __init__(self, *, prev_action, **kwargs):
