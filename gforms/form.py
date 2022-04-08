@@ -111,7 +111,8 @@ class Settings:
             self.send_receipt = self.SendReceipt(second_block[self._Index.RECEIPT])
             self.collect_emails = bool(list_get(second_block, self._Index.COLLECT_EMAILS, False))
             self.disable_autosave = bool(list_get(second_block, self._Index.DISABLE_AUTOSAVE, False))
-        self.is_quiz = bool(list_get(quiz, self._Index.IS_QUIZ, False))
+        if quiz is not None:
+            self.is_quiz = bool(list_get(quiz, self._Index.IS_QUIZ, False))
         if self.is_quiz:
             self.immediate_grades = bool(quiz[self._Index.IMMEDIATE_GRADES])
             grades_settings = quiz[self._Index.GRADES_SETTINGS]
