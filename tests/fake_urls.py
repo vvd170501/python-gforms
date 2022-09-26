@@ -47,6 +47,7 @@ class FormUrl(metaclass=UrlMeta):
     time: str
     file_upload: str
     image_attachments: str
+    option_image_attachments: str
 
     text_validation: str
     grid_validation: str

@@ -51,7 +51,7 @@ class _Action:
 
 
 class ImageAttachmemt:
-    """An imagw attached to an input element.
+    """An image attached to an input element.
 
     Attributes:
         caption: Optional image caption.
@@ -484,13 +484,20 @@ class ChoiceInput1D(ChoiceInput, SingleInput):
         return self._options[0]
 
     def _hints(self, indent=0, modify=False):
+
+        def format_option(opt, symbol):
+            """Adds choice symbol to the last line of option string representation.
+            Looks ugly, but at least it works"""
+            lines = opt.to_str().splitlines(keepends=True)
+            return ''.join(['  ' + line for line in lines[:-1]] + [f'{symbol} ' + lines[-1]])
+
         if modify:
             return [
-                f'{self._choice_symbols[opt.value in self._value]} {opt.to_str()}'
+                format_option(opt, self._choice_symbols[opt.value in self._value])
                 for opt in self.options
             ]
         else:
-            return [f'{self._choice_symbols[0]} {opt.to_str()}' for opt in self.options]
+            return [format_option(opt, self._choice_symbols[0]) for opt in self.options]
 
     def _answer(self):
         return []

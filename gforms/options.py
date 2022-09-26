@@ -1,6 +1,18 @@
 from .util import list_get
 
 
+class OptionImageAttachmemt:
+    """An image attached to an option"""
+    # Image object is not parsed (see gforms.elements.Image for more info and format)
+
+    @classmethod
+    def parse(cls, image_data):
+        return cls()
+
+    def to_str(self, indent=0):
+        return '<image>'
+
+
 class Option:
     """A choice option for a ChoiceInput.
 
@@ -13,7 +25,7 @@ class Option:
         VALUE = 0
         ACTION = 2
         OTHER = 4
-        IMAGE = 5  # not implemented
+        IMAGE = 5
 
     @classmethod
     def parse(cls, option):
@@ -25,25 +37,31 @@ class Option:
 
     @classmethod
     def _parse(cls, option):
+        image = list_get(option, cls._Index.IMAGE)
         return {
             'value': option[cls._Index.VALUE] or '',
             'other': bool(list_get(option, cls._Index.OTHER, False)),
+            'image': OptionImageAttachmemt.parse(image) if image else None,
         }
 
-    def __init__(self, *, value, other):
+    def __init__(self, *, value, other, image=None):
         self.value = value
         self.other = other
+        self.image = image
 
     def to_str(self, indent=0, with_value=None):
         """Returns a text representation of the option.
 
         For args description, see Form.to_str.
         """
+        # Images are shown above the options
+        header = self.image.to_str(indent) + '\n' if self.image is not None else ''
+
         if self.other:
             if with_value is not None:
-                return f'Other: "{with_value}"'
-            return 'Other'
-        return self.value
+                return f'{header}Other: "{with_value}"'
+            return f'{header}Other'
+        return header + self.value
 
 
 class ActionOption(Option):

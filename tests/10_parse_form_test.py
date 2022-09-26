@@ -295,6 +295,23 @@ class TestImageAttachments(ElementTest):
         assert image_with_caption.caption == 'The_caption'
 
 
+class TestOptionImageAttachments(ElementTest):
+    form_type = 'option_image_attachments'
+    expected = [[Radio, Checkboxes, Radio]]
+
+    def test_images(self, first_page):
+        radio, checkboxes, radio_action = first_page
+        assert radio.options[0].image is not None
+        assert radio.options[1].image is None
+        # Looks like it's impossible to add image to "Other"...
+        assert radio.other_option.image is None
+
+        assert checkboxes.options[0].image is not None
+        assert checkboxes.options[1].image is None
+
+        assert radio_action.options[0].image is not None
+
+
 class TestTextValidators(ElementTest):
     form_type = 'text_validation'
 

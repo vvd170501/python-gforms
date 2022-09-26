@@ -236,7 +236,7 @@ class Image(MediaElement):
     # elem[6] = [cosmoId, ?, [w, h, alignment]] (no direct link from cosmoId?)
     # search "google docs cosmoid" for more details
     # NOTE input elements may also have image attachments (see ImageAttachment).
-    # Format of IMAGE_OBJECT in ImageAttachment is the same as elem[6]
+    # Format of OptionImageAttachment and IMAGE_OBJECT in ImageAttachment is the same as elem[6]
     pass
 
 

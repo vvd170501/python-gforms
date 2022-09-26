@@ -40,7 +40,7 @@ def form_with_dump(url, session=None):
     orig_parse = form._parse
 
     def dump(data):
-        # replace video url
+        # replace video url and image ids
         data = rewrite_links(data)
         # erase the form url
         data[Form._DocIndex.URL] = '0' * len(data[Form._DocIndex.URL])
