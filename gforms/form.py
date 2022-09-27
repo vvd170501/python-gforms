@@ -258,7 +258,7 @@ class Form:
     def __init__(self):
         self._clear()
 
-    def load(self, url, session: Optional[requests.Session] = None):
+    def load(self, url, session: Optional[requests.Session] = None, resolve_images: bool = False):
         """Loads and parses the form.
 
         Args:
@@ -268,6 +268,8 @@ class Form:
                 Pre-filled links and response editing are also supported.
             session: A session which is used to load the form.
                 If session is None, requests.get is used.
+            resolve_images: If true, image URLs will be parsed.
+                Slows down loading of multipage forms.
 
         Raises:
             gforms.errors.InvalidURL: The url is not a valid form url.
@@ -305,6 +307,14 @@ class Form:
             self._prefilled_data = self._prefill_from_draft(self._draft)
 
         self._parse(data)
+
+        if resolve_images:
+            self._resolve_images(self.page[0], soup)
+            for page in self.pages[1:]:
+                resp = self._fetch_page(session, page)
+                soup = BeautifulSoup(resp.text, 'html.parser')
+                self._resolve_images(page, soup)
+
         self.is_loaded = True
 
     def to_str(self, indent=0, include_answer=False):
@@ -376,15 +386,19 @@ class Form:
         """
         self._iterate_elements(callback, fill_optional, do_fill=True)
 
-    def reload(self):
+    def reload(self, session: Optional[requests.Session] = None, resolve_images: bool = False):
         """Reloads the form.
+
+        Args:
+            session: See Form.load.
+            resolve_images: See Form.load.
 
         Raises:
             FormNotLoaded
         """
         if not self.is_loaded:
             raise FormNotLoaded(self)
-        self.load(self.url)
+        self.load(self.url, session, resolve_images)
 
     def reset(self):
         """Resets user input and restores prefilled values.
@@ -486,11 +500,15 @@ class Form:
 
         if emulate_history:
             last_response, page, history, draft = self._emulate_history(session, need_receipt)
+            # NOTE _fetch_page is not used for single-paged forms with captcha,
+            #      last_response may contain user input (see todo below)
         else:
             page = self.pages[0]
             history = self._history
             draft = self._draft
-            last_response = self._first_page  # TODO prefill with sample values (at load time?)
+            # TODO prefill with sample values (at load time?) (see captcha_handler note)
+            #      Alternative: always use _fetch_page, even for single-page forms
+            last_response = self._first_page
 
         captcha_response = None
 
@@ -501,7 +519,6 @@ class Form:
                 captcha_response = captcha_handler(last_response)
             last_response = self._submit_page(session, page, history, draft,
                                               continue_=next_page is not None,
-                                              need_receipt=need_receipt,
                                               captcha_response=captcha_response)
             soup = BeautifulSoup(last_response.text, 'html.parser')
             history = self._get_history(soup)
@@ -653,6 +670,15 @@ class Form:
         for (page, next_page) in zip(self.pages, self.pages[1:] + [None]):
             page._resolve_actions(next_page, mapping)
 
+    def _resolve_images(self, page: Page, soup: BeautifulSoup):
+        # TODO!!
+        # 1. Get all <img> tags
+        # 2. Filter out non-form images (e.g. Google logo)
+        # 3. For each image: find the corresponding element/option (by id?), update EmbeddedImage object
+        # TODO!! add tests
+        # TODO do more research, maybe it's possible to generate direct image links from IDs
+        pass
+
     def _input_elements(self):
         for page in self.pages:
             for element in page.elements:
@@ -725,15 +751,14 @@ class Form:
 
         while True:
             next_page = last_page.next_page()
-            if next_page is None:
+            if next_page is None:  # Last page
                 if update_last_response and last_page is not self.pages[0]:
-                    # TODO fill the form with sample values to get the last_response?
-                    #   (see captcha_handler note in Form.submit)
-                    last_response = self._submit_page(session,
-                                                      prev_page,
-                                                      ','.join(history[:-1]),
-                                                      json.dumps(draft),
-                                                      continue_=True, need_receipt=False)
+                    # Load the last page with captcha.
+                    # TODO do some more research. Does the captcha refresh?
+                    #      (i.e. will it be enough to load the last page only once in Form.load?)
+                    # Using the "Back" hack to avoid leaking user input from previous pages
+                    # to 3rd party captcha solving services.
+                    last_response = self._fetch_page(session, last_page)
                 return last_response, last_page, ','.join(history), json.dumps(draft)
             history.append(str(next_page.index))
             if draft[0] is None:
@@ -744,16 +769,19 @@ class Form:
             last_page = next_page
 
     def _submit_page(self, session, page, history, draft, *,
-                     continue_, need_receipt, captcha_response=None):
+                     continue_=True, captcha_response=None, back=False):
         payload = page.payload()
 
         payload[_ElementNames.FBZX] = self._fbzx
-        if continue_:
+        if continue_ and not back:
             payload['continue'] = 1
         payload[_ElementNames.HISTORY] = history
         payload[_ElementNames.DRAFT] = draft
-        if need_receipt and not continue_:
+        if captcha_response is not None:
             payload['g-recaptcha-response'] = captcha_response
+
+        if back:
+            payload['back'] = 1
 
         url = self._response_url(self._first_page.url)
         response = session.post(url, data=payload)
@@ -761,6 +789,17 @@ class Form:
         if response.status_code != 200:
             raise RuntimeError('Invalid response code', response)
         return response
+
+    def _fetch_page(self, session, page: Page):
+        # The "Back" hack.
+        # It's possible to return to any page from the "Submit" page,
+        # even if the "Submit" page isn't accessible from the target page.
+        return self._submit_page(
+            session,
+            Page.SUBMIT,
+            f'{last_page.index},{Page.SUBMIT.index}',
+            json.dumps(draft),
+        back=True)
 
     @staticmethod
     def _prefill_from_draft(draft: str):

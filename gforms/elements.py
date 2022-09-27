@@ -237,6 +237,14 @@ class Image(MediaElement):
     # search "google docs cosmoid" for more details
     # NOTE input elements may also have image attachments (see ImageAttachment).
     # Format of OptionImageAttachment and IMAGE_OBJECT in ImageAttachment is the same as elem[6]
+
+    # TODO!! Add EmbeddedImage class
+    # class EmbeddedImage:
+    #     width: int
+    #     height: int
+    #     alignment: Alignment(Enum)
+    #     id: str  # cosmoId
+    #     url: Optional[str]
     pass
 
 
