@@ -70,6 +70,7 @@ class ImageAttachmemt:
         self.caption = caption
 
     def to_str(self, indent=0):
+        # TODO!! change indent/add blank line. If the 1st option also has an image, it's hard to tell where the option begins
         if self.caption:
             descr = f'Image: {self.caption}'
         else:

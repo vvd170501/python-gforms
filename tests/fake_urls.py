@@ -48,6 +48,7 @@ class FormUrl(metaclass=UrlMeta):
     file_upload: str
     image_attachments: str
     option_image_attachments: str
+    images_all: str
 
     text_validation: str
     grid_validation: str
