@@ -109,6 +109,8 @@ class Element:
         NAME = 1
         DESCRIPTION = 2
         TYPE = 3
+        # 11: name_html?
+        # 12: descr_html?
 
     @classmethod
     def parse(cls, elem):
