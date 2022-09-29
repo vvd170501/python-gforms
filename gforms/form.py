@@ -309,7 +309,7 @@ class Form:
         self._parse(data)
 
         if resolve_images:
-            self._resolve_images(self.page[0], soup)
+            self._resolve_images(self.pages[0], soup)
             for page in self.pages[1:]:
                 resp = self._fetch_page(session, page)
                 soup = BeautifulSoup(resp.text, 'html.parser')
@@ -770,14 +770,14 @@ class Form:
 
     def _submit_page(self, session, page, history, draft, *,
                      continue_=True, captcha_response=None, back=False):
-        payload = page.payload()
+        payload = page.payload()  # !! if not back?
 
         payload[_ElementNames.FBZX] = self._fbzx
         if continue_ and not back:
             payload['continue'] = 1
         payload[_ElementNames.HISTORY] = history
         payload[_ElementNames.DRAFT] = draft
-        if captcha_response is not None:
+        if captcha_response is not None:  # !! and not back?
             payload['g-recaptcha-response'] = captcha_response
 
         if back:
@@ -797,8 +797,8 @@ class Form:
         return self._submit_page(
             session,
             Page.SUBMIT,
-            f'{last_page.index},{Page.SUBMIT.index}',
-            json.dumps(draft),
+            f'{page.index},{Page.SUBMIT.index}',
+            self._draft,  # !! remove/keep prefilled values?
         back=True)
 
     @staticmethod
