@@ -8,7 +8,7 @@ try:
 except ImportError:  # py<3.8
     from typing_extensions import Literal
 
-from .images import ImageObject
+from .media import ImageObject
 from .util import DefaultEnum, list_get
 from .validators import Validator, GridValidator, TextValidator, GridTypes, NumberTypes
 from .errors import DuplicateOther, EmptyOther, InvalidChoice, \
