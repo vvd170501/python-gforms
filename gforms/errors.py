@@ -74,7 +74,7 @@ class FormNotLoaded(FormError):
 
 class FormNotValidated(FormError):
     def _message(self):
-        return f'The form needs to be validated.'
+        return 'The form needs to be validated.'
 
 
 class ElementError(FormsError):

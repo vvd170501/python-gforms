@@ -15,7 +15,7 @@ from .elements import _Action, Image, Page, UserEmail, Value, \
 from .elements import CallbackRetVal, default_callback
 from .errors import ClosedForm, InfiniteLoop, ParseError, FormNotLoaded, FormNotValidated, \
     InvalidURL, NoSuchForm, EditingDisabled, SigninRequired
-from .images import ImageObject
+from .media import ImageObject
 from .util import add_indent, deprecated, list_get, page_separator
 
 

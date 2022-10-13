@@ -1,4 +1,4 @@
-from .images import ImageObject
+from .media import ImageObject
 from .util import list_get
 
 

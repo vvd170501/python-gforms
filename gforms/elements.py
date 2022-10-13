@@ -10,7 +10,7 @@ from .elements_base import _Action, Value, \
                            DateInput, TimeInput, \
                            ChoiceValue, EmptyValue, MultiChoiceValue, TextValue, \
                            GridChoiceValue, GridMultiChoiceValue
-from .images import ImageObject
+from .media import ImageObject, parse_style
 from .errors import ElementTypeError, InvalidDuration, \
                     InvalidText, MisconfiguredElement, \
                     UnknownValidator, InvalidArguments, UnknownElement
@@ -267,21 +267,24 @@ class Image(MediaElement):
 class Video(MediaElement):
     class _Index(MediaElement._Index):
         VIDEO = 6
+        STYLE = 2
         LINK = 3
-        # !! add other indices
-        # [None, 1(?), [320(w?), 180(h?), 0(align?)], link]
 
     @classmethod
     def _parse(cls, elem):
         res = super()._parse(elem)
         res.update({
-            'link': elem[cls._Index.VIDEO][cls._Index.LINK]
+            **parse_style(elem[cls._Index.VIDEO][cls._Index.STYLE]),
+            'link': elem[cls._Index.VIDEO][cls._Index.LINK],
         })
         return res
 
-    def __init__(self, *, link, **kwargs):
+    def __init__(self, *, link, width, height, alignment, **kwargs):
         super().__init__(**kwargs)
         self._link = link
+        self.width = width
+        self.height = height
+        self.alignment = alignment
 
     def url(self):
         return f'https://youtu.be/{self._link}'
