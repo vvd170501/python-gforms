@@ -10,7 +10,7 @@ from .elements_base import _Action, Value, \
                            DateInput, TimeInput, \
                            ChoiceValue, EmptyValue, MultiChoiceValue, TextValue, \
                            GridChoiceValue, GridMultiChoiceValue
-
+from .images import ImageObject
 from .errors import ElementTypeError, InvalidDuration, \
                     InvalidText, MisconfiguredElement, \
                     UnknownValidator, InvalidArguments, UnknownElement
@@ -235,21 +235,30 @@ class Comment(Element):
 
 
 class Image(MediaElement):
+    """An image element.
+
+    Attributes:
+        image: The image object.
+    """
+
     class _Index(MediaElement._Index):
         IMAGE = 6
-    # elem[6] = [cosmoId, ?, [w, h, alignment]] (no direct link from cosmoId?)
-    # search "google docs cosmoid" for more details
-    # NOTE input elements may also have image attachments (see ImageAttachment).
-    # Format of OptionImageAttachment and IMAGE_OBJECT in ImageAttachment is the same as elem[6]
 
-    # TODO!! Add EmbeddedImage class
-    # class EmbeddedImage:
-    #     width: int
-    #     height: int
-    #     alignment: Alignment(Enum)
-    #     id: str  # cosmoId
-    #     url: Optional[str]
-    pass
+    @classmethod
+    def _parse(cls, elem):
+        res = super()._parse(elem)
+        res.update({
+            'image': ImageObject.parse(elem[cls._Index.IMAGE])
+        })
+        return res
+
+    def __init__(self, *, image, **kwargs):
+        super().__init__(**kwargs)
+        self.image = image
+
+    def to_str(self, *args, **kwargs):
+        # !! add image info
+        return super().to_str(*args, **kwargs)
 
 
 class Video(MediaElement):
