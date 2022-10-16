@@ -281,6 +281,7 @@ class TestFileUpload(ElementTest):
     expected = [[], [FileUpload]]
 
 
+@pytest.mark.xfail(reason="Outdated form dump")
 class TestImageAttachments(ElementTest):
     form_type = 'image_attachments'
     expected = [[Short] * 3]
@@ -295,6 +296,7 @@ class TestImageAttachments(ElementTest):
         assert image_with_caption.caption == 'The_caption'
 
 
+@pytest.mark.xfail(reason="Outdated form dump")
 class TestOptionImageAttachments(ElementTest):
     form_type = 'option_image_attachments'
     expected = [[Radio, Checkboxes, Radio]]
