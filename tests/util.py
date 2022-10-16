@@ -39,14 +39,14 @@ def form_with_dump(url, session=None):
     form = Form()
     orig_parse = form._parse
 
-    def dump(data):
+    def dump(data, *args):
         # replace video url and image ids
         data = rewrite_links(data)
         # erase the form url
         data[Form._DocIndex.URL] = '0' * len(data[Form._DocIndex.URL])
         nonlocal form_data
         form_data = data
-        return orig_parse(data)
+        return orig_parse(data, *args)
 
     form._parse = dump
     form.load(url, session=session)

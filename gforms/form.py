@@ -1,7 +1,8 @@
 import json
 import re
+import sys
 from enum import Enum
-from typing import Callable, Optional, Set, Dict, List
+from typing import Callable, Dict, List, Optional, Set, Tuple, Union
 from urllib.parse import urlsplit, urlunsplit, parse_qs, urlencode
 
 import requests
@@ -9,10 +10,12 @@ from requests.status_codes import codes
 from bs4 import BeautifulSoup
 
 from .elements_base import InputElement
-from .elements import _Action, Page, UserEmail, Value, parse as parse_element
+from .elements import _Action, Checkboxes, Image, Page, Radio, UserEmail, Value, \
+                      parse as parse_element
 from .elements import CallbackRetVal, default_callback
 from .errors import ClosedForm, InfiniteLoop, ParseError, FormNotLoaded, FormNotValidated, \
     InvalidURL, NoSuchForm, EditingDisabled, SigninRequired
+from .images import ImageObject
 from .util import add_indent, deprecated, list_get, page_separator
 
 
@@ -302,15 +305,7 @@ class Form:
         if is_edit:
             self._prefilled_data = self._prefill_from_draft(self._draft)
 
-        self._parse(data)
-
-        if resolve_images:
-            self._resolve_images(self.pages[0], soup)
-            for page in self.pages[1:]:
-                resp = self._fetch_page(session, page)
-                soup = BeautifulSoup(resp.text, 'html.parser')
-                self._resolve_images(page, soup)
-
+        self._parse(data, resolve_images, session, soup)
         self.is_loaded = True
 
     def to_str(self, indent=0, include_answer=False):
@@ -595,7 +590,7 @@ class Form:
         url_data[3] = urlencode(query, doseq=True)
         return urlunsplit(url_data)
 
-    def _parse(self, data):
+    def _parse(self, data, resolve_images, session, first_page_html):
         self.name = data[self._DocIndex.NAME]
         form = data[self._DocIndex.FORM]
         self.title = form[self._FormIndex.TITLE]
@@ -620,9 +615,26 @@ class Form:
         if form[self._FormIndex.ELEMENTS] is None:
             return
 
+        curr_page_images = {}
+
+        def resolve_curr_page_images():
+            if not curr_page_images:
+                return
+            if len(self.pages) == 1:
+                soup = first_page_html
+            else:
+                resp = self._fetch_page(session, self.pages[-1])
+                soup = BeautifulSoup(resp.text, 'html.parser')
+            self._resolve_images(curr_page_images, soup)
+            if curr_page_images:
+                print(f'Failed to get URLs for some images on page {len(self.pages)}', file=sys.stderr)
+                curr_page_images.clear()
+
         for elem in form[self._FormIndex.ELEMENTS]:
             element = parse_element(elem)
             if isinstance(element, Page):
+                if resolve_images:
+                    resolve_curr_page_images()
                 self._add_page(element.with_index(len(self.pages)))
                 # A multipage form with no input elements still needs to be validated
                 # (Page transitions can form a loop).
@@ -631,6 +643,19 @@ class Form:
             self.pages[-1].append(element)
             if isinstance(element, InputElement):
                 element.prefill(self._prefilled_data)
+            if resolve_images:
+                if isinstance(element, Image):
+                    curr_page_images[element.id] = element.image
+                elif isinstance(element, InputElement):
+                    if element.image is not None:
+                        curr_page_images[element.id] = element.image
+                    if isinstance(element, (Checkboxes, Radio)):
+                        for option in element.options:
+                            if option.image is not None:
+                                curr_page_images[(element.id, option.value)] = option.image
+        if resolve_images:
+            resolve_curr_page_images()
+
         self._resolve_actions()
 
     def _add_page(self, page: Page):
@@ -667,15 +692,58 @@ class Form:
         for (page, next_page) in zip(self.pages, self.pages[1:] + [None]):
             page._resolve_actions(next_page, mapping)
 
-    def _resolve_images(self, page: Page, soup: BeautifulSoup):
-        # TODO!!
-        # 1. Get all <img> tags
-        # 2. Filter out non-form images (e.g. Google logo)
-        # 3. For each image: find the corresponding element/option (by id?), update EmbeddedImage object
-        # TODO!! add tests
+    def _resolve_images(self, images: Dict[Union[int, Tuple[int, str]], ImageObject], soup: BeautifulSoup):
         # TODO do more research, maybe it's possible to generate direct image links from IDs
         #      search "google docs cosmoid", may be useful.
-        pass
+        form = soup.find('form')
+        for img in form.find_all('img'):
+            # Simply iterating all image objects won't work, because elements and options may be shuffled.
+            # Elements order in JSON doesn't change even if shuffle is enabled.
+            # Options order can change,
+            # but it seems to be always the same in JSON and in HTML form.
+            # The current solution (with ids) doesn't depend on element/option order.
+            img_obj = None
+            option_name = None
+            # Option attachment. Guess this one will break first.
+            # If a tag is inserted after img.parent,
+            # the image will most likely end up in the element's attachment (if it exists)
+            option_parent = img.parent.next_sibling
+            if option_parent is not None:
+                option = option_parent.find(lambda tag: tag.has_attr('data-value'))
+                if option is not None:
+                    # Option names of a single element are always unique
+                    option_name = option['data-value']
+            # One of the parents has the element id.
+            # The loop should work even if depth of <img> tagis changed.
+            for parent in img.parents:
+                if parent is form:
+                    break
+                try:
+                    # Image element.
+                    if parent.has_attr('data-item-id'):
+                        img_obj = images.pop(int(parent['data-item-id']))
+                        break
+                    # Input element attachment.
+                    if parent.has_attr('data-params'):
+                        # data-param="%.@.[{element_id},..."
+                        dp = parent['data-params']
+                        start = dp.index('[') + 1
+                        end = dp.index(',', start + 1)
+                        element_id = int(dp[start:end])
+                        if option_name is not None:
+                            img_obj = images.pop((element_id, option_name))
+                        else:
+                            img_obj = images.pop(element_id)
+                        break
+                except Exception as e:
+                    # Unexpected format change :(
+                    # Also may be a KeyError from broken option attachment
+                    # if the element itself doesn't have an image.
+                    print(f'Cannot find element for image {img["src"]}, error: {e}',
+                          file=sys.stderr)
+                    break
+            if img_obj is not None:
+                img_obj.url = img['src']
 
     def _input_elements(self):
         for page in self.pages:
@@ -766,14 +834,15 @@ class Form:
 
     def _submit_page(self, session, page, history, draft, *,
                      continue_=True, captcha_response=None, back=False):
-        payload = page.payload()  # !! if not back?
+        payload = page.payload() if not back else {}
 
         payload[_ElementNames.FBZX] = self._fbzx
         if continue_ and not back:
             payload['continue'] = 1
         payload[_ElementNames.HISTORY] = history
-        payload[_ElementNames.DRAFT] = draft
-        if captcha_response is not None:  # !! and not back?
+        if not back:
+            payload[_ElementNames.DRAFT] = draft
+        if captcha_response is not None:
             payload['g-recaptcha-response'] = captcha_response
 
         if back:
@@ -791,15 +860,11 @@ class Form:
         # It's possible to return to any page from the "Submit" page,
         # even if the "Submit" page isn't accessible from the target page.
 
-        draft = json.loads(self._draft)
-        draft[0] = None  # clear prefilled values
-        # !! email not needed?
-
         return self._submit_page(
             session,
             Page.SUBMIT,
             f'{page.index},{Page.SUBMIT.index}',
-            json.dumps(draft),  # !! cache?
+            None,
             back=True)
 
     @staticmethod
