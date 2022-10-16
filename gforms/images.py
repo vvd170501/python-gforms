@@ -41,9 +41,6 @@ class ImageObject:
             'alignment': cls.Alignment(list_get(img_attrs, cls._Index.ALIGNMENT)),
         }
 
-    def size_str(self):
-        return f'{self.width}x{self.height}'
-
     def __init__(self, *, width, height, alignment, id_, url=None, **kwargs):
         super().__init__(**kwargs)
         self.width = width
@@ -51,3 +48,11 @@ class ImageObject:
         self.alignment = alignment
         self.id = id_
         self.url = url
+
+    def size_str(self):
+        return f'{self.width}x{self.height}'
+
+    def to_str(self, indent=0):
+        descr = f'Image ({self.size_str()})'
+        details = f': {self.url}' if self.url else ''
+        return f'<{descr}{details}>'

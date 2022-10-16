@@ -9,8 +9,8 @@ import requests
 from requests.status_codes import codes
 from bs4 import BeautifulSoup
 
-from .elements_base import InputElement
-from .elements import _Action, Checkboxes, Image, Page, Radio, UserEmail, Value, \
+from .elements_base import ImageChoiceInput, InputElement
+from .elements import _Action, Image, Page, UserEmail, Value, \
                       parse as parse_element
 from .elements import CallbackRetVal, default_callback
 from .errors import ClosedForm, InfiniteLoop, ParseError, FormNotLoaded, FormNotValidated, \
@@ -649,7 +649,8 @@ class Form:
                 elif isinstance(element, InputElement):
                     if element.image is not None:
                         curr_page_images[element.id] = element.image
-                    if isinstance(element, (Checkboxes, Radio)):
+                    if isinstance(element, ImageChoiceInput):
+                        # 19.10.2022: it's not possible to attach an image to the "Other" option
                         for option in element.options:
                             if option.image is not None:
                                 curr_page_images[(element.id, option.value)] = option.image

@@ -6,7 +6,7 @@ from warnings import warn
 from .elements_base import _Action, Value, \
                            Element, MediaElement, InputElement, \
                            ActionChoiceInput, ChoiceInput1D, SingleInput, MultiChoiceInput, \
-                           OtherChoiceInput, ValidatedInput, TextInput, Grid, \
+                           ImageChoiceInput, OtherChoiceInput, ValidatedInput, TextInput, Grid, \
                            DateInput, TimeInput, \
                            ChoiceValue, EmptyValue, MultiChoiceValue, TextValue, \
                            GridChoiceValue, GridMultiChoiceValue
@@ -256,9 +256,12 @@ class Image(MediaElement):
         super().__init__(**kwargs)
         self.image = image
 
-    def to_str(self, *args, **kwargs):
-        # !! add image info
-        return super().to_str(*args, **kwargs)
+    def to_str(self, indent=0, **kwargs):
+        header = f'{self._type_str()}'
+        if self.name:
+            header = f'{header}: {self.name}'
+        descr = f'\n[{self.description}]' if self.description else ''
+        return f'{header}\n{self.image.to_str()}{descr}'
 
 
 class Video(MediaElement):
@@ -339,7 +342,7 @@ class Paragraph(TextInput):
     pass
 
 
-class Radio(ActionChoiceInput, OtherChoiceInput):
+class Radio(ActionChoiceInput, ImageChoiceInput, OtherChoiceInput):
     _choice_symbols = RADIO_SYMBOLS
 
     def _resolve_actions(self, next_page, mapping):
@@ -352,7 +355,7 @@ class Dropdown(ActionChoiceInput):
     pass
 
 
-class Checkboxes(ValidatedInput, OtherChoiceInput, MultiChoiceInput):
+class Checkboxes(ValidatedInput, ImageChoiceInput, OtherChoiceInput, MultiChoiceInput):
     _choice_symbols = CHECKBOX_SYMBOLS
 
     class _Index(ChoiceInput1D._Index):

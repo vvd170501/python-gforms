@@ -75,21 +75,8 @@ class ImageAttachment(ImageObject):
         self.caption = caption
 
     def to_str(self, indent=0):
-        # TODO!! change indent/add blank line.
-        #        If the 1st option also has an image, it's hard to tell where the option begins.
-        # HTML form renders caption under the image
-        descr = f'Image ({self.size_str()})'
-
-        details = ''
-        if self.caption:
-            details = f'[{self.caption}]'
-            if self.url:
-                details += f'({self.url})'
-        elif self.url:
-            details = self.url
-
-        sep = ': ' if details else ''
-        return ' ' * indent + f'<{descr}{sep}{details}>'
+        caption = f'\n[{self.caption}]' if self.caption else ''
+        return f'{super().to_str(indent)}{caption}'
 
 
 class Element:
@@ -494,24 +481,47 @@ class ChoiceInput1D(ChoiceInput, SingleInput):
     def options(self):
         return self._options[0]
 
+    def _format_option(self, opt, chosen, **to_str_kwargs):
+        return f'{self._choice_symbols[chosen]} {opt.to_str(**to_str_kwargs)}'
+
     def _hints(self, indent, modify):
-
-        def format_option(opt, symbol):
-            """Adds choice symbol to the last line of option string representation.
-            Looks ugly, but at least it works"""
-            lines = opt.to_str().splitlines(keepends=True)
-            return ''.join(['  ' + line for line in lines[:-1]] + [f'{symbol} ' + lines[-1]])
-
         if modify:
             return [
-                format_option(opt, self._choice_symbols[opt.value in self._value])
+                self._format_option(opt, opt.value in self._value)
                 for opt in self.options
             ]
         else:
-            return [format_option(opt, self._choice_symbols[0]) for opt in self.options]
+            return [self._format_option(opt, False) for opt in self.options]
 
     def _answer(self):
         return []
+
+
+class ImageChoiceInput(ChoiceInput1D):
+    """A ChoiceInput1D which may have options with image attachments.
+
+    Currently this is used only for Radio and Checkboxes.
+    """
+
+    @property
+    def _has_options_with_images(self):
+        # Py3.8+ has functools.cached_property. Rewrite when 3.7- gets dropped?
+        if not hasattr(self, '_has_options_with_images_'):
+            self._has_options_with_images_ = any(opt.image is not None for opt in self.options)
+        return self._has_options_with_images_
+
+    def _format_option(self, opt, chosen, **to_str_kwargs):
+        """Better string representation for options with image attachments.
+        """
+        if opt.image is None:
+            sep = '\n' if self._has_options_with_images else ''
+            return sep + super()._format_option(opt, chosen, **to_str_kwargs)
+        # Looks ugly, but at least it works
+        lines = opt.to_str(**to_str_kwargs).splitlines(keepends=True)
+        return '\n' + ''.join(
+            ['  ' + line for line in lines[:-1]] +
+            [f'{self._choice_symbols[chosen]} {lines[-1]}']
+        )
 
 
 class OtherChoiceInput(ChoiceInput1D):
@@ -612,11 +622,10 @@ class OtherChoiceInput(ChoiceInput1D):
         if self.other_option is not None:
             if modify and self._other_value is not None:
                 hints.append(
-                    f'{self._choice_symbols[1]}'
-                    f' {self.other_option.to_str(with_value=self._other_value)}'
+                    self._format_option(self.other_option, True, with_value=self._other_value)
                 )
             else:
-                hints.append(f'{self._choice_symbols[0]} {self.other_option.to_str()}')
+                hints.append(self._format_option(self.other_option, False))
         return hints
 
 
