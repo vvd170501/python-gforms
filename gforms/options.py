@@ -5,16 +5,7 @@ from .util import list_get
 class OptionImageAttachment(ImageObject):
     """An image attached to an option"""
 
-    # TODO!! move to base class?
-    @classmethod
-    def parse(cls, image_data):
-        return cls(**super()._parse(image_data))
-
-    def to_str(self, indent=0):
-        # !! improve?
-        descr = f'Image ({self.size_str()})'
-        details = f': {self.url}' if self.url else ''
-        return f'<{descr}{details}>'
+    pass
 
 
 class Option:
