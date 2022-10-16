@@ -14,7 +14,8 @@ class TestFormMethods(FormDumpTest):
     form_type = 'prefilled'
 
     # reload() test is useless
-    def test_reset(self, form):
+    def test_reset(self, mutable_form):
+        form = mutable_form
         text_input = form.pages[0].elements[0]
         old_value = 'text_value'
         text_input.set_value('new_value')
@@ -22,7 +23,8 @@ class TestFormMethods(FormDumpTest):
         # reuse code from element tests?
         assert list(text_input.payload().values())[0][0] == old_value
 
-    def test_clear(self, form):
+    def test_clear(self, mutable_form):
+        form = mutable_form
         text_input = form.pages[0].elements[0]
         form.clear()
         assert text_input.payload() == {}
@@ -58,26 +60,26 @@ class TestFill(FormDumpTest):
             return ['1'] * len(elem.rows)
         return '1'
 
-    def test_fill_default(self, form):
-        form.fill()
+    def test_fill_default(self, mutable_form):
+        mutable_form.fill()
 
-    def test_fill_with_optional(self, form):
+    def test_fill_with_optional(self, mutable_form):
         # Check that the default callback was invoked on at least one optional element
         # Optional elements in this form cannot be filled by the default callback
         with pytest.raises(NotImplementedError):
-            form.fill(fill_optional=True)
+            mutable_form.fill(fill_optional=True)
 
-    def test_fill_callback(self, form):
-        form.fill(self.custom_callback)
+    def test_fill_callback(self, mutable_form):
+        mutable_form.fill(self.custom_callback)
 
-    def test_callback_missing_return(self, form):
+    def test_callback_missing_return(self, mutable_form):
         with pytest.raises(ValueError, match=r'missing.+return statement'):
-            form.fill(lambda e, i, j: None)
+            mutable_form.fill(lambda e, i, j: None)
 
-    def test_to_str_filled(self, form):
+    def test_to_str_filled(self, mutable_form):
         # NOTE These tests only assert that to_str doesn't fail. The return value is not checked
-        form.fill(self.custom_callback)
-        _ = form.to_str(include_answer=True)
+        mutable_form.fill(self.custom_callback)
+        _ = mutable_form.to_str(include_answer=True)
 
 
 class TestFillNotLoaded:
@@ -121,7 +123,8 @@ class TestInvalidation(FormDumpTest):
 
     form_type = 'form_validation'
 
-    def test_element_invalidation(self, form):
+    def test_element_invalidation(self, mutable_form):
+        form = mutable_form
         form.validate()  # will pass, since the elements are optional
         assert form.is_validated
         short = form.pages[0].elements[0]
@@ -130,7 +133,8 @@ class TestInvalidation(FormDumpTest):
         short.validate()
         assert form.is_validated
 
-    def test_path_invalidation(self, form):
+    def test_path_invalidation(self, mutable_form):
+        form = mutable_form
         form.validate()
         assert form.is_validated
         radio = form.pages[0].elements[1]
@@ -159,7 +163,8 @@ class TestMultipageValidation(FormDumpTest):
 
     form_type = 'multipage_validation'
 
-    def test_skipped_page(self, form):
+    def test_skipped_page(self, mutable_form):
+        form = mutable_form
         radio = form.pages[0].elements[0]
         radio.set_value('Skip')
         radio2 = form.pages[1].elements[0]

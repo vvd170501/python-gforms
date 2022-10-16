@@ -29,6 +29,7 @@ class WithEmulation(RealFormTest, ABC):
 
     @pytest.fixture(scope='class', autouse=True)
     def fill_form(self, form):
+        # Here the form is filled in class scope => no need to use mutable_form
         form.fill(self._callback)
 
     def test_submit_normal(self, form, session):

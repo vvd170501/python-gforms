@@ -2,6 +2,7 @@ import html
 import json
 import re
 from abc import ABC, abstractmethod
+from copy import deepcopy
 from pathlib import Path
 from typing import Dict, Tuple
 
@@ -233,7 +234,14 @@ class BaseFormTest(Skippable, ABC):
 
     @abstractmethod
     def form(self, *fixtures):
+        # TODO Raise error on access to "non-const" methods:
+        #      clear, reset, reload, validate, fill and elements' set_value.
+        #      submit() doesn't change the form's state, so it's not listed here.
         raise NotImplementedError()
+
+    @pytest.fixture
+    def mutable_form(self, form):
+        return deepcopy(form)
 
 
 class FormDumpTest(BaseFormTest):
@@ -246,6 +254,14 @@ class FormParseTest(FormDumpTest):
     def test_to_str(self, form):
         # NOTE These tests only assert that to_str doesn't fail. The return value is not checked
         _ = form.to_str()
+
+    @pytest.fixture(scope='class')
+    def pages(self, form):
+        return [page.elements for page in form.pages]
+
+    @pytest.fixture(scope='class')
+    def first_page(self, pages):
+        return pages[0]
 
 
 class RealFormTest(BaseFormTest):
