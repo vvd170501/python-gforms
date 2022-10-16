@@ -3,7 +3,7 @@ from typing import List, Type
 
 import pytest
 
-from gforms.elements_base import Element
+from gforms.elements_base import Element, ImageAttachment
 from gforms.elements import Page, UserEmail
 from gforms.elements import Comment, Image, Video
 from gforms.elements import Short, Paragraph
@@ -11,7 +11,8 @@ from gforms.elements import Checkboxes, Dropdown, Radio, Scale
 from gforms.elements import CheckboxGrid, RadioGrid
 from gforms.elements import Date, DateTime, Time, Duration
 from gforms.elements import FileUpload
-from gforms.options import ActionOption
+from gforms.options import ActionOption, OptionImageAttachment
+from gforms.media import Alignment, ImageObject
 from gforms.validators import GridValidator, TextValidator, GridTypes, CheckboxTypes
 
 from . import fake_urls
@@ -55,15 +56,7 @@ class TestPages(FormParseTest):
 class ElementTest(FormParseTest):
     expected: List[List[Type[Element]]]
 
-    @pytest.fixture(scope='class')
-    def pages(self, form):
-        return [page.elements for page in form.pages]
-
-    @pytest.fixture(scope='class')
-    def first_page(self, pages):
-        return pages[0]
-
-    @pytest.mark.required  # if we cannot parse some elements, most probably other tests will fail
+    @pytest.mark.required  # if we cannot parse some elements, other tests will likely fail
     def test_elements(self, pages):
         types = [[type(elem) for elem in elements] for elements in pages]
         assert types == self.expected
@@ -281,37 +274,96 @@ class TestFileUpload(ElementTest):
     expected = [[], [FileUpload]]
 
 
-@pytest.mark.xfail(reason="Outdated form dump")
-class TestImageAttachments(ElementTest):
-    form_type = 'image_attachments'
-    expected = [[Short] * 3]
-
-    def test_images(self, first_page):
-        assert first_page[0].image is None
-        image = first_page[1].image
-        image_with_caption = first_page[2].image
-        assert image is not None
-        assert not image.caption
-        assert image_with_caption is not None
-        assert image_with_caption.caption == 'The_caption'
+class MediaAttrsTest(FormParseTest):
+    @staticmethod
+    def check_attrs(objects, expected_type, expected_attrs):
+        for i, obj in enumerate(objects):
+            assert isinstance(obj, expected_type), \
+                    f'Expected a(n) {expected_type.__name__} at index {i}, ' \
+                    f'but got {type(obj).__name__}'
+            for attr, values in expected_attrs.items():
+                assert hasattr(obj, attr), f'Missing attribute {attr} at index {i}'
+                assert getattr(obj, attr) == values[i], f'Incorrect `{attr}` value at index {i}'
 
 
-@pytest.mark.xfail(reason="Outdated form dump")
-class TestOptionImageAttachments(ElementTest):
-    form_type = 'option_image_attachments'
-    expected = [[Radio, Checkboxes, Radio]]
+class TestVideoAttrs(MediaAttrsTest):
+    form_type = 'video_attrs'
 
-    def test_images(self, first_page):
-        radio, checkboxes, radio_action = first_page
-        assert radio.options[0].image is not None
-        assert radio.options[1].image is None
-        # Looks like it's impossible to add image to "Other"...
-        assert radio.other_option.image is None
+    def test_video_attrs(self, first_page):
+        self.check_attrs(
+            first_page,
+            Video,
+            {
+                'width': [320, 320, 320, 521],
+                'height': [180, 180, 180, 392],
+                'alignment': [Alignment.LEFT, Alignment.CENTER, Alignment.RIGHT, Alignment.LEFT],
+            }
+        )
 
-        assert checkboxes.options[0].image is not None
-        assert checkboxes.options[1].image is None
 
-        assert radio_action.options[0].image is not None
+class TestImages(MediaAttrsTest):
+    form_type = 'images'
+
+    def test_images(self, pages):
+        # Images on the page:
+        # - Left-aligned
+        # - Centered
+        # - Right-aligned
+        # - With custom size
+        # - With hover text
+        self.check_attrs(
+            pages[1],
+            Image,
+            {
+                'description': [None] * 4 + ['Hovertext'],
+            }
+        )
+        images = [el.image for el in pages[1]]
+        self.check_attrs(
+            images,
+            ImageObject,
+            {
+                'width': [375, 375, 375, 605, 375],
+                'height': [500, 500, 500, 806, 500],
+                'alignment': [Alignment.LEFT, Alignment.CENTER, Alignment.RIGHT] +
+                             [Alignment.LEFT] * 2,
+            }
+        )
+
+
+    def test_element_attachments(self, pages):
+        # Image attachments:
+        # - Left-aligned
+        # - Centered
+        # - Right-aligned
+        # - With custom size
+        # - With caption
+        images = [el.image for el in pages[2]]
+        self.check_attrs(
+            images,
+            ImageAttachment,
+            {
+                'width': [740, 740, 740, 211, 740],
+                'height': [1078, 1078, 1078, 307, 1078],
+                'alignment': [Alignment.LEFT, Alignment.CENTER, Alignment.RIGHT] +
+                             [Alignment.LEFT] * 2,
+                'caption': [None] * 4 + ['The_caption'],
+            }
+        )
+
+    def test_option_attachments(self, pages):
+        # 2 Radio inputs, each with 2 options, each with an image.
+        # It's not possible to edit image size or alignment.
+        images = sum([[opt.image for opt in el.options] for el in pages[3]], [])
+        self.check_attrs(
+            images,
+            OptionImageAttachment,
+            {
+                'width': [260, 260, 260, 260],
+                'height': [260, 174, 260, 188],
+                'alignment': [Alignment.LEFT] * 4,
+            }
+        )
 
 
 class TestTextValidators(ElementTest):
