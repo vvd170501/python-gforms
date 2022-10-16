@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 
 from enum import Enum, auto
-from typing import Dict, List, Union, cast, Any, Optional, Tuple, TYPE_CHECKING, Callable
+from typing import Dict, List, Union, cast, Any, Optional, Tuple, Callable
+
 try:
     from typing import Literal
 except ImportError:  # py<3.8
@@ -50,7 +51,7 @@ class _Action:
     SUBMIT = -3
 
 
-class ImageAttachmemt:
+class ImageAttachment:
     """An image attached to an input element.
 
     Attributes:
@@ -70,7 +71,8 @@ class ImageAttachmemt:
         self.caption = caption
 
     def to_str(self, indent=0):
-        # TODO!! change indent/add blank line. If the 1st option also has an image, it's hard to tell where the option begins
+        # TODO!! change indent/add blank line.
+        #        If the 1st option also has an image, it's hard to tell where the option begins.
         if self.caption:
             descr = f'Image: {self.caption}'
         else:
@@ -176,7 +178,7 @@ class InputElement(Element, ABC):
         res.update({
             'entry_ids': [e[cls._Index.ENTRY_ID] for e in entries],
             'required': bool(entries[0][cls._Index.REQUIRED]),  # same for all entries
-            'image': ImageAttachmemt.parse(image) if image else None,
+            'image': ImageAttachment.parse(image) if image else None,
         })
         return res
 
@@ -307,7 +309,7 @@ class InputElement(Element, ABC):
         self._values = values  # type: ignore
         self.is_validated = False
 
-    def _header(self, indent=0) -> List[str]:
+    def _header(self, indent) -> List[str]:
         parts = [self._type_str()]
         if self.required:
             parts.append('*')
@@ -319,10 +321,13 @@ class InputElement(Element, ABC):
             parts.append(f'\n{self.image.to_str(indent)}')
         return parts
 
-    def _hints(self, indent=0, modify=False):
+    def _hints(self, indent, modify):
         """Returns input hints (options / values).
 
         Returned strings should be already indented.
+        Args:
+            indent: Indent for elements/options. Unused (.yet?)
+            modify: Modify the hints' appearance based on user's answer.
         """
         return []
 
@@ -367,17 +372,12 @@ class SingleInput(InputElement):
 
 
 class ChoiceInput(InputElement, ABC):
-    """An input element which has a predefined set of options.
-
-    Attributes:
-        options: A list of allowed choices for this element.
-    """
+    """An input element which has a predefined set of options."""
 
     class _Index(InputElement._Index):
         OPTIONS = 1
 
-    # This class is basically the same as CheckboxGrid
-    _has_multichoice = False
+    _has_multichoice = False  # (dis)allows list values in set_value()
 
     @classmethod
     def _parse(cls, elem):
@@ -399,6 +399,7 @@ class ChoiceInput(InputElement, ABC):
     @property
     @abstractmethod
     def options(self):
+        """A list of allowed choices for this element."""
         raise NotImplementedError()
 
     def _set_choices(self, choices: List[Union[List[ChoiceValue], EmptyValue]]):
@@ -412,9 +413,6 @@ class ChoiceInput(InputElement, ABC):
                     self._find_option(choice, i)
                 )
         self._set_values(new_choices)
-
-    def _hints(self, indent=0, modify=False):
-        return []
 
     def _find_option(self, value: ChoiceValue, i):
         if isinstance(value, Option):
@@ -463,7 +461,6 @@ class ChoiceInput1D(ChoiceInput, SingleInput):
         shuffle_options: Self-explanatory..
     """
 
-    # ChoiceInput1D == Checkboxes without "other"
     _choice_symbols = ('·', '>')
 
     class _Index(ChoiceInput._Index):
@@ -481,12 +478,11 @@ class ChoiceInput1D(ChoiceInput, SingleInput):
         super().__init__(**kwargs)
         self.shuffle_options = shuffle_options
 
-
     @property
     def options(self):
         return self._options[0]
 
-    def _hints(self, indent=0, modify=False):
+    def _hints(self, indent, modify):
 
         def format_option(opt, symbol):
             """Adds choice symbol to the last line of option string representation.
@@ -599,7 +595,7 @@ class OtherChoiceInput(ChoiceInput1D):
             if not self._other_value:
                 raise EmptyOther(self)
 
-    def _hints(self, indent=0, modify=False):
+    def _hints(self, indent, modify):
         hints = super()._hints(indent, modify)
         if self.other_option is not None:
             if modify and self._other_value is not None:
@@ -658,7 +654,7 @@ class ValidatedInput(InputElement, ABC):
         if self.validator is not None and not self._is_empty():  # Non-empty value
             self.validator.validate(self)
 
-    def _hints(self, indent=0, modify=False):
+    def _hints(self, indent, modify):
         res = []
         if self.validator is not None:
             res.append(f'! {self.validator.to_str()} !')
@@ -725,7 +721,7 @@ class Grid(ValidatedInput, ChoiceInput):
         return self.validator.subtype is GridTypes.EXCLUSIVE_COLUMNS \
             and len(self.cols) < len(self.rows)
 
-    def _hints(self, indent=0, modify=False):
+    def _hints(self, indent, modify):
         # NOTE row/column names may need wrapping
         res = super()._hints(indent, modify)
         max_length = max(len(row) for row in self.rows)
@@ -896,7 +892,6 @@ class DateInput(SingleInput):
 
 class MediaElement(Element):
     """A base class for media elements."""
-
     pass
 
 
@@ -909,8 +904,9 @@ class TextInput(ValidatedInput, SingleInput):
     @classmethod
     def _parse_validator(cls, elem) -> Optional[TextValidator]:
         value = cls._get_entry(elem)
-        if len(value) > cls._Index.VALIDATOR and value[cls._Index.VALIDATOR]:
-            return TextValidator.parse(value[cls._Index.VALIDATOR][0])
+        validator_data = list_get(value, cls._Index.VALIDATOR)
+        if validator_data:
+            return TextValidator.parse(validator_data[0])
         return None
 
     def set_value(self, value: Union[TextValue, EmptyValue]):
@@ -937,7 +933,6 @@ class TextInput(ValidatedInput, SingleInput):
     def _is_misconfigured(self):
         return self.validator.subtype is NumberTypes.RANGE \
             and self.validator.args[0] > self.validator.args[1]
-    # TODO to_str(..., True) -> show blank line instead of an answer? same for date and time
 
 
 class ActionChoiceInput(ChoiceInput1D):

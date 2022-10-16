@@ -9,7 +9,7 @@ from requests.status_codes import codes
 from bs4 import BeautifulSoup
 
 from .elements_base import InputElement
-from .elements import _Action, Element, Page, UserEmail, Value, parse as parse_element
+from .elements import _Action, Page, UserEmail, Value, parse as parse_element
 from .elements import CallbackRetVal, default_callback
 from .errors import ClosedForm, InfiniteLoop, ParseError, FormNotLoaded, FormNotValidated, \
     InvalidURL, NoSuchForm, EditingDisabled, SigninRequired
@@ -72,7 +72,8 @@ class Settings:
         EDIT_RESPONSES = 3
         # Second block. The first 4 elements may be None
         SHOW_PROGRESSBAR = 0
-        # Signin requirement is not present in form data? Both values (this and MAYBE_SUBMIT_ONCE) are false for a form with a file upload element.
+        # Signin requirement is not present in form data?
+        # Both values (this and MAYBE_SUBMIT_ONCE) are false for a form with a file upload element.
         SUBMIT_ONCE = 1  # None(default/not set?) == False?
         SHUFFLE_QUESTIONS = 2
         RECEIPT = 3
@@ -202,10 +203,7 @@ class Form:
         description: Description of the form.
         pages: List of form pages.
         settings: The form settings.
-        requires_signin: The user must use a google account to submit this form.
         is_loaded: Indicates if this form was properly loaded and parsed.
-        is_validated:
-            Indicates if this form was successfully validated and may be submitted.
     """
 
     class _DocIndex:
@@ -229,7 +227,7 @@ class Form:
 
     is_loaded: bool
 
-    _selected_pages: Set[Page]  # Pages which will be submitted.
+    _selected_pages: Set[Page]  # Pages which will be submitted. Used to detect loops.
     _unvalidated_pages: Set[Page]  # A subset of _selected_pages.
     # Full path == page sequence without repeating pages and with a final page.
     _found_full_path: bool
@@ -242,6 +240,7 @@ class Form:
 
     @property
     def requires_signin(self):
+        """If True, the user must use a google account to submit this form."""
         # NOTE also should be true for forms with file upload,
         # but now (06 Sep 2021) such forms can't be loaded (HTTP Unauthorized on the first page)
         # Signin requirement may depend on other form elements (if they are added in future).
@@ -249,10 +248,7 @@ class Form:
 
     @property
     def is_validated(self):
-        """Indicates if all input elements were validated.
-
-        If self.fill was called and did not raise an exception,
-        this value will be True."""
+        """Indicates if this form was successfully validated and may be submitted."""
         return len(self._unvalidated_pages) == 0 and self._found_full_path
 
     def __init__(self):
@@ -285,7 +281,7 @@ class Form:
         if session is None:
             session = requests
 
-        self._clear()
+        self._clear()  # TODO make atomic? If load/reload fails, form should keep old data
 
         self.url = url
 
@@ -566,7 +562,8 @@ class Form:
                 self.title = soup.find('title').text
             raise ClosedForm(self)
         if self._editing_disabled(resp):
-            # if raised from Form.load, there is (?) no way to get the form title without additional requests
+            # If raised from Form.load, there is (?) no way to get the form title
+            # without sending additional requests.
             raise EditingDisabled(self)
 
     @staticmethod
@@ -677,6 +674,7 @@ class Form:
         # 3. For each image: find the corresponding element/option (by id?), update EmbeddedImage object
         # TODO!! add tests
         # TODO do more research, maybe it's possible to generate direct image links from IDs
+        #      search "google docs cosmoid", may be useful.
         pass
 
     def _input_elements(self):
@@ -746,7 +744,6 @@ class Form:
             draft[7] = 1  # ??
 
         last_page = self.pages[0]
-        prev_page = None
         last_response = self._first_page
 
         while True:
@@ -765,7 +762,6 @@ class Form:
                 draft[0] = last_page.draft()
             else:
                 draft[0] += last_page.draft()
-            prev_page = last_page
             last_page = next_page
 
     def _submit_page(self, session, page, history, draft, *,
@@ -794,12 +790,17 @@ class Form:
         # The "Back" hack.
         # It's possible to return to any page from the "Submit" page,
         # even if the "Submit" page isn't accessible from the target page.
+
+        draft = json.loads(self._draft)
+        draft[0] = None  # clear prefilled values
+        # !! email not needed?
+
         return self._submit_page(
             session,
             Page.SUBMIT,
             f'{page.index},{Page.SUBMIT.index}',
-            self._draft,  # !! remove/keep prefilled values?
-        back=True)
+            json.dumps(draft),  # !! cache?
+            back=True)
 
     @staticmethod
     def _prefill_from_draft(draft: str):

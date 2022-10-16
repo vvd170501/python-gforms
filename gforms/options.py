@@ -1,7 +1,7 @@
 from .util import list_get
 
 
-class OptionImageAttachmemt:
+class OptionImageAttachment:
     """An image attached to an option"""
     # Image object is not parsed (see gforms.elements.Image for more info and format)
 
@@ -41,7 +41,7 @@ class Option:
         return {
             'value': option[cls._Index.VALUE] or '',
             'other': bool(list_get(option, cls._Index.OTHER, False)),
-            'image': OptionImageAttachmemt.parse(image) if image else None,
+            'image': OptionImageAttachment.parse(image) if image else None,
         }
 
     def __init__(self, *, value, other, image=None):
