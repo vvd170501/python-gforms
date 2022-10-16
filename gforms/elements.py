@@ -3,20 +3,20 @@ from datetime import date, datetime, time, timedelta
 from typing import List, Union, Optional, Dict, Tuple, Set, cast, Callable
 from warnings import warn
 
-from .elements_base import _Action, Value, MultiChoiceInput
-from .elements_base import Element, MediaElement, InputElement, \
-                           ActionChoiceInput, ChoiceInput1D, SingleInput, \
-                           OtherChoiceInput, ValidatedInput, TextInput, \
-                           DateInput, Grid, TimeInput
-from .elements_base import ChoiceValue, EmptyValue, MultiChoiceValue, TextValue, \
+from .elements_base import _Action, Value, \
+                           Element, MediaElement, InputElement, \
+                           ActionChoiceInput, ChoiceInput1D, SingleInput, MultiChoiceInput, \
+                           OtherChoiceInput, ValidatedInput, TextInput, Grid, \
+                           DateInput, TimeInput, \
+                           ChoiceValue, EmptyValue, MultiChoiceValue, TextValue, \
                            GridChoiceValue, GridMultiChoiceValue
 
 from .errors import ElementTypeError, InvalidDuration, \
                     InvalidText, MisconfiguredElement, \
                     UnknownValidator, InvalidArguments, UnknownElement
 from .options import ActionOption
-from .util import RADIO_SYMBOLS, CHECKBOX_SYMBOLS, add_indent, elem_separator, random_subset, \
-    list_get
+from .util import RADIO_SYMBOLS, CHECKBOX_SYMBOLS,\
+                  add_indent, elem_separator, random_subset, list_get
 from .validators import CheckboxValidator, CheckboxTypes
 
 
@@ -62,8 +62,6 @@ class Page(Element):
     Attributes:
         index: Index of the page.
         elements: A list of elements contained within the page.
-        is_validated: Indicates if all elements in this page are validated.
-            If True, the page can be submitted.
     """
 
     class _Index(Element._Index):
@@ -101,6 +99,10 @@ class Page(Element):
 
     @property
     def is_validated(self):
+        """Indicates if all elements in this page are validated.
+
+        If True, the page can be submitted.
+        """
         return len(self._unvalidated_elements) == 0
 
     def with_index(self, index):
@@ -233,6 +235,8 @@ class Comment(Element):
 
 
 class Image(MediaElement):
+    class _Index(MediaElement._Index):
+        IMAGE = 6
     # elem[6] = [cosmoId, ?, [w, h, alignment]] (no direct link from cosmoId?)
     # search "google docs cosmoid" for more details
     # NOTE input elements may also have image attachments (see ImageAttachment).
@@ -252,6 +256,8 @@ class Video(MediaElement):
     class _Index(MediaElement._Index):
         VIDEO = 6
         LINK = 3
+        # !! add other indices
+        # [None, 1(?), [320(w?), 180(h?), 0(align?)], link]
 
     @classmethod
     def _parse(cls, elem):
@@ -305,9 +311,8 @@ class UserEmail(Short):
             validator=val
         )
 
-    def _hints(self, indent=0, modify=False):
+    def _hints(self, indent, modify):
         # Don't include the validator hint
-        from .elements_base import ValidatedInput
         return super(ValidatedInput, self)._hints(indent, modify)
 
     def payload(self):
@@ -419,7 +424,7 @@ class Scale(ChoiceInput1D):
             value = str(value)
         return self._set_choices([self._to_choice_list(value)])
 
-    def _hints(self, indent=0, modify=False):
+    def _hints(self, indent, modify):
         max_len = 1 if len(self.options) < 10 else 2
         tab = ' ' * (len(self.low) + 1) if self.low else ''
         header = tab + ' '.join([f'{opt.value:^{max_len}}' for opt in self.options])
@@ -628,7 +633,7 @@ class DateTime(DateInput):
 
 
 class FileUpload(SingleInput):
-    # As of June 2021, forms with a file upload require sign in for loading,
+    # As of October 2022, forms with a file upload require sign in for loading,
     # so this class is actually never used
 
     # TODO parse more info?

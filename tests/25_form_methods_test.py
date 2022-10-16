@@ -4,7 +4,7 @@ import pytest
 
 from gforms import Form
 from gforms.elements_base import Grid
-from gforms.elements import DateTime, Duration, Date, Time, Short
+from gforms.elements import DateTime, Duration, Date, Time
 from gforms.errors import FormNotLoaded, FormNotValidated
 
 from .conftest import FormDumpTest

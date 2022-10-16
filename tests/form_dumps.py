@@ -1,4 +1,4 @@
-from .fake_urls import _yt_link, ResponseId
+from .fake_urls import ResponseId
 
 
 class FDMeta(type):
