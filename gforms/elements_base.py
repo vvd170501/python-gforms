@@ -8,6 +8,7 @@ try:
 except ImportError:  # py<3.8
     from typing_extensions import Literal
 
+from .images import ImageObject
 from .util import DefaultEnum, list_get
 from .validators import Validator, GridValidator, TextValidator, GridTypes, NumberTypes
 from .errors import DuplicateOther, EmptyOther, InvalidChoice, \
@@ -51,33 +52,44 @@ class _Action:
     SUBMIT = -3
 
 
-class ImageAttachment:
+class ImageAttachment(ImageObject):
     """An image attached to an input element.
 
     Attributes:
         caption: Optional image caption.
     """
-    class _Index:
-        # IMAGE_OBJECT is not parsed (see gforms.elements.Image for more info and format)
+    class _Index(ImageObject._Index):
         IMAGE_OBJECT = 0
         IMAGE_CAPTION = 1
 
     @classmethod
     def parse(cls, image_data):
-        caption = list_get(image_data, cls._Index.IMAGE_CAPTION)
-        return cls(caption)
+        res = super()._parse(image_data[cls._Index.IMAGE_OBJECT])
+        res.update({
+            'caption': list_get(image_data, cls._Index.IMAGE_CAPTION),
+        })
+        return cls(**res)
 
-    def __init__(self, caption):
+    def __init__(self, caption, **kwargs):
+        super().__init__(**kwargs)
         self.caption = caption
 
     def to_str(self, indent=0):
         # TODO!! change indent/add blank line.
         #        If the 1st option also has an image, it's hard to tell where the option begins.
+        # HTML form renders caption under the image
+        descr = f'Image ({self.size_str()})'
+
+        details = ''
         if self.caption:
-            descr = f'Image: {self.caption}'
-        else:
-            descr = 'Untitled image'
-        return ' ' * indent + f'<{descr}>'
+            details = f'[{self.caption}]'
+            if self.url:
+                details += f'({self.url})'
+        elif self.url:
+            details = self.url
+
+        sep = ': ' if details else ''
+        return ' ' * indent + f'<{descr}{sep}{details}>'
 
 
 class Element:
