@@ -82,6 +82,10 @@ class Settings:
         RECEIPT = 3
         COLLECT_EMAILS = 4
         DISABLE_AUTOSAVE = 5  # may be missing
+        # 17.03.2023: Now there's a 7th field (index 6), seems like it's always present.
+        # Its value is 3 if COLLECT_EMAILS is enabled, and 1 otherwise.
+        # Other known settings don't affect this field.
+
         # Quiz block
         # It's possible to create a form with IMMEDIATE_GRADES ==  COLLECT_EMAILS == 0
         GRADES_SETTINGS = 0
