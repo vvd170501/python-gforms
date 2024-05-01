@@ -34,6 +34,18 @@ class TestEmail(SettingsTest):
         settings.send_receipt = Settings.SendReceipt.NEVER
 
 
+class TestVerifiedEmail(SettingsTest):
+    form_type = 'settings_verified_email'
+
+    def modify_settings(self, settings):
+        settings.collect_emails = Settings.CollectEmails.VERIFIED
+        settings.send_receipt = Settings.SendReceipt.NEVER
+
+    def test(self, form):
+        super().test(form)
+        assert form.requires_signin
+
+
 class TestEmailOptIn(SettingsTest):
     form_type = 'settings_email_opt_in'
 

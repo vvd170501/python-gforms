@@ -75,8 +75,6 @@ class Settings:
         EDIT_RESPONSES = 3
         # Second block. The first 4 elements may be None
         SHOW_PROGRESSBAR = 0
-        # Signin requirement is not present in form data?
-        # Both values (this and MAYBE_SUBMIT_ONCE) are false for a form with a file upload element.
         SUBMIT_ONCE = 1  # None(default/not set?) == False?
         SHUFFLE_QUESTIONS = 2
         RECEIPT = 3
@@ -222,7 +220,7 @@ class Form:
         FORM = 1
         NAME = 3
         URL = 14  # Unused.
-        MAYBE_SUBMIT_ONCE = 18  # Duplicate / other meaning? Currently unused
+        SIGNIN_REQUIRED = 18
 
     class _FormIndex:
         DESCRIPTION = 0
@@ -254,9 +252,10 @@ class Form:
     def requires_signin(self):
         """If True, the user must use a google account to submit this form."""
         # NOTE also should be true for forms with file upload,
-        # but now (06 Sep 2021) such forms can't be loaded (HTTP Unauthorized on the first page)
-        # Signin requirement may depend on other form elements (if they are added in future).
-        return self.settings.submit_once
+        # but as of 01 May 2024, such forms have _signin_required == False for some reason.
+        # These forms can't be loaded anyway (request is redirected to the sign-in page),
+        # so this case is not handled.
+        return self._signin_required
 
     @property
     def is_validated(self):
@@ -537,6 +536,7 @@ class Form:
         self.description = None
         self.pages = []
         self.settings = Settings()
+        self._signin_required = False
         self.is_loaded = False
 
         self._prefilled_data = {}
@@ -607,7 +607,8 @@ class Form:
             self.title = self.name
         self.description = form[self._FormIndex.DESCRIPTION]
 
-        self.settings.parse(form)  # NOTE may need data[18] in future
+        self.settings.parse(form)
+        self._signin_required = data[self._DocIndex.SIGNIN_REQUIRED]
 
         self._add_page(Page.first())
         self._selected_pages = {self.pages[0]}  # The first page will be submitted for any path.

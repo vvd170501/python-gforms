@@ -56,6 +56,7 @@ class FormUrl(metaclass=UrlMeta):
     shuffle_options: str
 
     settings_email: str
+    settings_verified_email: str
     settings_email_opt_in: str
     settings_email_always: str
     settings_submit_once: str
