@@ -30,7 +30,7 @@ class TestEmail(SettingsTest):
     form_type = 'settings_email'
 
     def modify_settings(self, settings):
-        settings.collect_emails = True
+        settings.collect_emails = Settings.CollectEmails.USER_INPUT
         settings.send_receipt = Settings.SendReceipt.NEVER
 
 
@@ -38,7 +38,7 @@ class TestEmailOptIn(SettingsTest):
     form_type = 'settings_email_opt_in'
 
     def modify_settings(self, settings):
-        settings.collect_emails = True
+        settings.collect_emails = Settings.CollectEmails.USER_INPUT
         settings.send_receipt = Settings.SendReceipt.OPT_IN
 
 
@@ -46,7 +46,7 @@ class TestEmailAlways(SettingsTest):
     form_type = 'settings_email_always'
 
     def modify_settings(self, settings):
-        settings.collect_emails = True
+        settings.collect_emails = Settings.CollectEmails.USER_INPUT
         settings.send_receipt = Settings.SendReceipt.ALWAYS
 
 
@@ -126,7 +126,7 @@ class TestQuizAlt(SettingsTest):
         settings.immediate_grades = False
         # collect_emails is automatically enabled when immediate_grades are disabled
         # It may be disabled manually
-        settings.collect_emails = True
+        settings.collect_emails = Settings.CollectEmails.USER_INPUT
         settings.send_receipt = Settings.SendReceipt.NEVER
         settings.show_missed = False
         settings.show_correct_answers = False

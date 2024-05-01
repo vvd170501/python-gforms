@@ -80,14 +80,11 @@ class Settings:
         SUBMIT_ONCE = 1  # None(default/not set?) == False?
         SHUFFLE_QUESTIONS = 2
         RECEIPT = 3
-        COLLECT_EMAILS = 4
-        DISABLE_AUTOSAVE = 5  # may be missing
-        # 17.03.2023: Now there's a 7th field (index 6), seems like it's always present.
-        # Its value is 3 if COLLECT_EMAILS is enabled, and 1 otherwise.
-        # Other known settings don't affect this field.
+        OLD_COLLECT_EMAILS = 4  # Not used anymore, seems to always be None
+        DISABLE_AUTOSAVE = 5  # May be missing in old forms
+        COLLECT_EMAILS = 6
 
         # Quiz block
-        # It's possible to create a form with IMMEDIATE_GRADES ==  COLLECT_EMAILS == 0
         GRADES_SETTINGS = 0
         SHOW_MISSED = 2
         SHOW_CORRECT = 3
@@ -95,8 +92,16 @@ class Settings:
         IMMEDIATE_GRADES = 1
         IS_QUIZ = 2
 
+    class CollectEmails(Enum):
+        NO = 1
+        VERIFIED = 2
+        USER_INPUT = 3  # "Responder input" - same behavior as the old "collect emails" flag
+
+        def __bool__(self):
+            return self != self.NO
+
     class SendReceipt(Enum):
-        UNUSED = None  # value is None when collect_emails is False
+        UNUSED = None  # value was None with collect_emails = False (01.05.2023 - default is 2, but old forms still have None)
         OPT_IN = 1
         NEVER = 2
         ALWAYS = 3
@@ -117,8 +122,8 @@ class Settings:
             self.submit_once = bool(second_block[self._Index.SUBMIT_ONCE])
             self.shuffle_questions = bool(second_block[self._Index.SHUFFLE_QUESTIONS])
             self.send_receipt = self.SendReceipt(second_block[self._Index.RECEIPT])
-            self.collect_emails = bool(list_get(second_block, self._Index.COLLECT_EMAILS, False))
             self.disable_autosave = bool(list_get(second_block, self._Index.DISABLE_AUTOSAVE, False))
+            self.collect_emails = self.CollectEmails(list_get(second_block, self._Index.COLLECT_EMAILS, self.CollectEmails.NO))
         if quiz is not None:
             self.is_quiz = bool(list_get(quiz, self._Index.IS_QUIZ, False))
         if self.is_quiz:
@@ -130,7 +135,7 @@ class Settings:
 
     def __init__(self):
         """Initializes all settings with a default value."""
-        self.collect_emails = False
+        self.collect_emails = self.CollectEmails.NO
         self.send_receipt = self.SendReceipt.UNUSED
         self.submit_once = False
         self.show_summary = False
