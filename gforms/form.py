@@ -221,6 +221,7 @@ class Form:
         NAME = 3
         URL = 14  # Unused.
         SIGNIN_REQUIRED = 18
+        UNKNOWN = 19  # 26.03.2025 - seems to always be 1 in new forms, can be 1 or missing in old ones. Related to settings?
 
     class _FormIndex:
         DESCRIPTION = 0
